@@ -1,6 +1,16 @@
 # CHANGELOG
 
-## Version 2.1.0, 2023-XX-XX, `kezarjg`
+## Version 2.1.1, 2024-09-XX, `kezarjg`
+
+- Introduced a new metricMap structure to define and manage vehicle telemetry metrics.
+- Updated telemetry creation functions to leverage metricMap for improved data retrieval and storage.
+- Additional telemetry field sent to ABRP
+  - `soe`, `hvac_power`, `hvac_setpoint`, `cabin_temp`, `tire_pressure_fl`, 
+    `tire_pressure_fr`, `tire_pressure_rl`, `tire_pressure_rr`
+- Removed telemetry field no longer part of the Iternio API
+  - `kwh_charged`
+
+## Version 2.1.0, 2024-09-09, `kezarjg`
 
 - Programattically determine what vehicle metrics are supported and only add supported metrics to the telemetry object.
 - Additional telemetry field sent to ABRP
