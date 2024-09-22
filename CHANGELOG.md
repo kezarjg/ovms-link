@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## Version 2.1.1, 2024-09-XX, `kezarjg`
+## Version 2.2.0, 2024-09-XX, `kezarjg`
 
 - Introduced a new metricMap structure to define and manage vehicle telemetry metrics.
 - Updated telemetry creation functions to leverage metricMap for improved data retrieval and storage.
@@ -10,6 +10,7 @@
 - Removed telemetry field no longer part of the Iternio API
   - `kwh_charged`
 - Separated metric gathering from telemetry sending to support bulk data uploads.
+- Switched to bulk data uploads.
 
 ## Version 2.1.0, 2024-09-09, `kezarjg`
 
