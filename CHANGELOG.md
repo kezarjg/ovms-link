@@ -11,6 +11,7 @@
   - `kwh_charged`
 - Separated metric gathering from telemetry sending to support bulk data uploads.
 - Switched to bulk data uploads.
+- Added Toyota e-TNGA specific metrics (Toyota bZ4X and Subaru Solterra)
 
 ## Version 2.1.0, 2024-09-09, `kezarjg`
 
