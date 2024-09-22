@@ -9,7 +9,7 @@
     `tire_pressure_fr`, `tire_pressure_rl`, `tire_pressure_rr`
 - Removed telemetry field no longer part of the Iternio API
   - `kwh_charged`
-- Separated metric gathering from telemetry sending
+- Separated metric gathering from telemetry sending to support bulk data uploads.
 
 ## Version 2.1.0, 2024-09-09, `kezarjg`
 
