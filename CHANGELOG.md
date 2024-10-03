@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## Version 2.1.0, 2023-XX-XX, `kezarjg`
+## Version 2.1.0, 2024-09-24, `kezarjg`
 
 - Programattically determine what vehicle metrics are supported and only add supported metrics to the telemetry object.
 - Additional telemetry field sent to ABRP
