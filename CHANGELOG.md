@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## Version 2.3.0, 2026-06-01, `kezarjg`
+
+- Switched telemetry transmission to bulk uploads (`/1/tlm/bulk`) with a queue.
+- Added GPS-time gating so telemetry is only sent once a valid UTC time is known.
+- Added token-tracking subscribe/unsubscribe wrappers for clean event teardown.
+- Wired `capacity` (from `v.b.capacity`) and derived `soe` (`SoC × capacity`).
+- `hvac_power` is now supported only where a vehicle-specific override provides it.
+- Fixed telemetry loss on concurrent bulk flush (batch is snapshotted before send).
+- Fixed silent data loss: the queue is cleared only when the API confirms success
+  (HTTP 200 *and* JSON body `status: "ok"`), not on HTTP 200 alone.
+- Restored median power/speed smoothing on the default (non-bandwidth-saver) path.
+- Fixed a latent Nissan Leaf range-override bug (implicit globals under strict mode).
+- Made `lib/abrp.js` require()-able under Jest and expanded the unit test suite.
+
 ## Version 2.2.0, 2025-05-21, `kezarjg`
 
 - Introduced a centralized metricMap to define and compute telemetry parameters in a modular, declarative format.
