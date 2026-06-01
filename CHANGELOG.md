@@ -10,7 +10,7 @@
 - Fixed telemetry loss on concurrent bulk flush (batch is snapshotted before send).
 - Fixed silent data loss: the queue is cleared only when the API confirms success
   (HTTP 200 *and* JSON body `status: "ok"`), not on HTTP 200 alone.
-- Restored median power/speed smoothing on the default (non-bandwidth-saver) path.
+- Restored median power/speed smoothing while driving on the default (non-bandwidth-saver) path; charging continues to send instantaneous power.
 - Fixed a latent Nissan Leaf range-override bug (implicit globals under strict mode).
 - Made `lib/abrp.js` require()-able under Jest and expanded the unit test suite.
 
