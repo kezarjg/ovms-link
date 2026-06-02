@@ -270,10 +270,15 @@ optimizations.
   send exists for the OVMS API-key staleness window; if ABRP does not require it,
   removing it during sub-70 kph driving cuts idle traffic.
 
-**Not supported by the API:**
+**Undocumented / unverified:**
 
-- **Request-body compression (gzip/deflate).** Not documented or advertised as
-  accepted by Iternio, and impractical via OVMS `HTTP.Request`. Do not rely on it.
+- **Request-body compression (gzip/deflate).** Iternio's public docs and reference
+  client make **no mention** of compression — it is neither confirmed nor denied,
+  and this project has not tested whether the API accepts a `Content-Encoding:
+  gzip` body. Independently of the server: the plugin could not easily produce
+  compressed requests anyway — Duktape ships no compression library and OVMS
+  `HTTP.Request` does not gzip bodies. Treat as unavailable until verified with
+  Iternio (contact@iternio.com) or by experiment.
 
 ---
 
