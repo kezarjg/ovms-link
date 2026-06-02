@@ -27,8 +27,9 @@ Scopes: `get_telemetry`, `set_telemetry`, `get_plan`, `vehicle_history`.
 | --- | --- | --- |
 | `oauth/me` with the **generic Live-Data token** as `access_token` | **200 `status: ok`** | The generic token carries **identity + telemetry scope** |
 | `get_latest_plan` with the generic token | **401** (earlier) | Generic token lacks **`get_plan`** scope |
-| `oauth/token` with `client_id = client_secret = OVMS_API_KEY`, bogus `code` | **400 `invalid_grant`** (not `invalid_client`) | **The telemetry api_key appears to double as the OAuth2 client** — client accepted, only the code rejected. *(Tentative)* |
-| `oauth/auth` with `client_id = OVMS_API_KEY` | **200 text/html** (login page) | Didn't reject the `client_id`; redirect-URI validation happens on submit, so not conclusive |
+| `oauth/auth` with `client_id = OVMS_API_KEY`, opened in a **real browser** | **"Connection error, failed to fetch app name."** — the authorize page can't resolve an application for the `client_id`; never reaches approval/redirect | **DISPROVEN: `OVMS_API_KEY` is NOT a registered OAuth2 client.** No OAuth2 application is associated with it. |
+| `oauth/token` with `client_id = client_secret = OVMS_API_KEY`, bogus `code` | **400 `invalid_grant`** (not `invalid_client`) | **Red herring** — looked like the client was accepted, but the authorize result above is authoritative: the api_key is not an OAuth2 client. |
+| `oauth/auth` fetched via `curl` (no browser) | 200 text/html (SPA shell) | Inconclusive — the shell loads, but client lookup happens in client-side JS (which is what fails in the browser). |
 | device-code flow | none found (planning spec only has a separate `/auth/login`) | Must use the redirect-based authorization-code flow |
 
 ### `oauth/me` response shape (sanitized)
@@ -50,10 +51,15 @@ namespace as the plugin's `overrideMetricMap` vehicle handling.
 - **Plan access needs the full flow:** `get_latest_plan` (and the plan dashboard)
   require a token minted via OAuth2 **with `get_plan` scope** — the generic
   Live-Data token won't do.
-- **api_key-as-client (tentative):** if `OVMS_API_KEY` really is a registered OAuth2
-  client, 3.0 avoids a separate client registration. **Confirm before relying on it.**
-- **The embedded redirect is the real hurdle.** Authorization-code flow returns the
-  code on a redirect; an OVMS module has no public callback. Candidate strategies:
+- **A dedicated OAuth2 client must be registered with Iternio (CONFIRMED prerequisite).**
+  `OVMS_API_KEY` is *not* an OAuth2 client (verified: the authorize page errors with
+  *"failed to fetch app name"*). Per the docs, setting up OAuth2 needs an **API key +
+  a redirect URL + an application name** registered with Iternio (`contact@iternio.com`).
+  This is a **hard dependency** for the whole `get_plan` / plan-dashboard line of work —
+  nothing OAuth2 can be built or tested until it exists.
+- **The embedded redirect is the *next* hurdle (after registration).** Authorization-code
+  flow returns the code on a redirect; an OVMS module has no public callback. Candidate
+  strategies (only relevant once a real client + allowed redirect exist):
   - **Redirect to the module's own web-UI** page (the SP3 config page captures
     `?code=…` locally), if the client allows a `http://<module-ip>/…` or `localhost`
     redirect.
@@ -63,15 +69,18 @@ namespace as the plugin's `overrideMetricMap` vehicle handling.
 
 ## Open questions — confirm before implementing
 
-1. **Is `OVMS_API_KEY` a registered OAuth2 client**, and **which `redirect_uri`(s)**
-   does it allow? This decides whether any embedded redirect strategy is even viable
-   and whether a separate client must be set up with Iternio.
-2. **Which redirect strategy** is acceptable for an embedded module (module web-UI
-   capture vs. out-of-band copy-code)?
-3. **Manual-flow experiment:** complete `oauth/auth` (scope `get_plan`) in a browser,
-   exchange the returned `code` at `oauth/token`, then call `get_latest_plan` — to
-   capture the **plan response shape** (still unknown; see the plan-awareness doc).
-   Requires resolving the redirect_uri question first.
+0. ~~Is `OVMS_API_KEY` a registered OAuth2 client?~~ **ANSWERED: no.** Verified in a
+   real browser — the authorize page errors *"failed to fetch app name."* A dedicated
+   OAuth2 client must be registered with Iternio first.
+1. **Register the OAuth2 client** with Iternio (`contact@iternio.com`): obtain a
+   `client_id` / `client_secret`, set the **application name** and an allowed
+   **`redirect_uri`**. **Everything else below is blocked on this.**
+2. **Which redirect strategy** is registered/acceptable for an embedded module (module
+   web-UI capture vs. out-of-band copy-code)?
+3. **Manual-flow experiment (once a client exists):** complete `oauth/auth`
+   (scope `get_plan`) in a browser, exchange the returned `code` at `oauth/token`, then
+   call `get_latest_plan` — to capture the **plan response shape** (still unknown; see
+   the plan-awareness doc).
 
 ## References
 
