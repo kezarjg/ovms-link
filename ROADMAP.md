@@ -123,23 +123,34 @@ brainstorm → spec → plan → implement cycle:
 
 2.x is intentionally a single file to minimise hand-copy install steps. Automated
 plugin delivery removes that cost, so 3.0 can split the source into focused,
-independently testable modules organised under a `lib/abrp/` directory — e.g.:
+independently testable modules (organised under `lib/abrp/` in the repo) — e.g.
+`core` (pipeline + queue), `api` (Iternio client: `send`/`bulk`, `get_next_charge`,
+`get_latest_plan`, OAuth2), `charge` (closed-loop control), and a thin `entry`.
 
-- `lib/abrp/core.js` — telemetry pipeline + queue
-- `lib/abrp/api.js` — Iternio API client (`send`/`bulk`, `get_next_charge`,
-  `get_latest_plan`, OAuth2)
-- `lib/abrp/charge.js` — closed-loop charge control
-- `lib/abrp.js` — thin entry that `require()`s the parts (keeps
-  `require("lib/abrp")` / `ovmsmain.js` unchanged)
+**How modules load under plugin delivery (verified in OVMS source):**
 
-OVMS's Duktape uses Node-style CommonJS `require()`/`module.exports` with a module
-cache, and resolves nested ids from `/store/scripts/` — `require("lib/abrp/core")`
-loads `/store/scripts/lib/abrp/core.js`. Jest handles the same `require()` natively,
-so the split also improves unit-test isolation. **Caveat:** delivering several
-files via the plugin manifest's `elements` array is schema-supported but untrodden
-(every existing plugin ships exactly one `module`); confirm how multiple `module`
-elements auto-wire so only the entry is auto-loaded and it `require()`s the rest
-(validate in sub-project 1).
+- A plugin install does **not** edit `ovmsmain.js`. At each JS-engine start the
+  framework auto-evaluates `<name> = require("plugin/<plugin>/<path>");` for every
+  enabled `module` element, independently of (and before) `ovmsmain.js`, which is
+  only ever read. So a plugin-delivered `abrp` ships **no `ovmsmain.js`** — the
+  entry module is auto-loaded.
+- Plugin files install to **`/store/plugins/<name>/`** (not `/store/scripts/`), so
+  the in-code require ids must be **`plugin/abrp/<part>`** (e.g.
+  `require("plugin/abrp/core")` → `/store/plugins/abrp/core.js`), **not**
+  `lib/abrp/...` (that prefix is the hand-install layout under
+  `/store/scripts/lib/`).
+- **Relative requires (`./core`) do NOT work** — OVMS's resolver ignores the
+  parent module id and resolves an id simply as `<id>.js`. Every module references
+  its siblings by full id. (Consequence: the require prefix is install-location
+  specific, so the same source can't serve both the plugin and hand-install layouts
+  unchanged; 3.0 targets plugin delivery → use `plugin/abrp/…`.)
+- OVMS Duktape is Node-style CommonJS (`require`/`module.exports`, module cache);
+  Jest handles the same `require()` natively, so the split also improves unit-test
+  isolation.
+- **Caveat:** multiple `module` elements in one plugin manifest is schema-supported
+  but untrodden (every existing plugin ships exactly one `module`); confirm the
+  auto-wiring loads **only** the entry (which then `require()`s the rest) rather
+  than auto-loading every module element. Validate in sub-project 1.
 
 ## Out of scope (for now)
 
