@@ -448,8 +448,13 @@ conversion). A field is sent only when its OVMS source(s) are present.
    current install is a manual, multi-file copy (§12), which also makes updates
    painful. Packaging the plugin with an OVMS plugin **manifest** (`name`,
    `version`, `prerequisites`, `elements`) served from a repository would enable
-   `plugin install` / `plugin update`; the `module` element auto-loads, so the
-   manual `ovmsmain.js` wiring would likely go away. **Open question:** the OVMS
+   `plugin install` / `plugin update`. A `module` element is **auto-loaded** by the
+   framework — at each JS-engine start it evaluates `require("plugin/<name>/<path>")`
+   (resolving from `/store/plugins/<name>/`), independently of and before
+   `ovmsmain.js`. **A plugin install leaves `ovmsmain.js` untouched** — that file is
+   only ever read, never written — so a plugin-delivered build ships **no
+   `ovmsmain.js`** and needs no manual wiring (verified in the OVMS source,
+   `ovms_plugins.cpp` / `ovms_duktape.cpp`). **Open question:** the OVMS
    plugin element types (`module`/`json`/`webpage`/`webhook`/`webrsc`) have **no
    element for installing trusted root CAs** to `/store/trustedca` + running
    `tls trust reload`, so the CA certs (§3, §12) cannot be auto-installed by the
