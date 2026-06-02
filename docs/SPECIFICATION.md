@@ -456,8 +456,13 @@ conversion). A field is sent only when its OVMS source(s) are present.
    plugin alone — they would remain a manual prerequisite unless the plugin
    bootstraps them at first run. Resolve the cert-install path before claiming a
    true one-command install. Routes: an independent Iternio repo
-   (`plugin repo install`), and/or superseding the stale `abrp` 0.1 plugin in the
-   default `openvehicles` repo.
+   (`plugin repo install`), and/or (re-)publishing `abrp` to the default
+   `openvehicles` repo (`http://api.openvehicles.com/plugins`). Note: as of
+   2026-06 that repo's `plugins.json` no longer lists `abrp` — the legacy `0.1`
+   entry has been **removed** (a `plugin list` may still show it as a stale cached
+   install) — and the OVMS firmware's `plugin/abrp/README.rst` already redirects
+   users to this project. So this would be a **clean addition to an empty slot**,
+   not a takeover.
 
 ---
 
