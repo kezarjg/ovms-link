@@ -37,13 +37,27 @@ point at which the manual hand-copy era is deprecated.
 
 ## 2.3.0 — Pipeline + data integrity (in testing)
 
-**Status:** implemented on `refactor/abrp-2.3.0`; awaiting on-vehicle validation.
+**Status:** code-complete and verified on `refactor/abrp-2.3.0` (25 unit tests
+pass, ESLint clean, `VERSION = '2.3.0'`, `package.json` 2.3.0).
 
 Completes the half-finished bulk-telemetry refactor and ships it on a current
 upstream base: bulk-upload queue, the concurrent-flush and HTTP-200-vs-`status:"ok"`
 data-integrity fixes, `capacity`/`soe` wiring, restored median smoothing, a Jest
 test suite, CA certs + README from upstream, and a lint-clean source. Detailed in
 `docs/superpowers/specs/2026-06-01-abrp-2.3.0-refactor-design.md`.
+
+**Remaining to ship:**
+
+1. **On-vehicle validation** — the gate (unit tests can't cover real
+   `HTTP`/`OvmsMetrics`/TLS or the CA-cert handshake). Run the checklist in
+   `SPECIFICATION.md` §9: install + `tls trust reload`, reload JS engine
+   (`ABRP::started`), `abrp.info()` shows `2.3.0`, `abrp.onetime()` connects over
+   TLS, `abrp.send(1)` drains the queue over `ticker.10` with no loss.
+2. **Merge `refactor/abrp-2.3.0` → `dev`** once validation passes (clean
+   fast-forward).
+
+The upstream PR to `iternio/ovms-link` is a separate, later step (gated on
+validation and the `arbp.test.js` rename — see 2.3.1).
 
 ## 2.3.1 — Quality patch (optional)
 

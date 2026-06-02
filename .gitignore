@@ -1,1 +1,4 @@
 /node_modules
+
+# Generated documentation (source of truth is docs/SPECIFICATION.md)
+/docs/SPECIFICATION.html
