@@ -1,7 +1,7 @@
 # ovms-link — Project Specification
 
-**Version:** 2.3.0
-**Status:** Current (reflects `lib/abrp.js` as of the 2.3.0 refactor)
+**Version:** 2.3.1
+**Status:** Current (reflects `lib/abrp.js` as of 2.3.1)
 **Audience:** Maintainers and integrators of the OVMS → ABRP telemetry plugin.
 
 This document specifies the complete behavior of the plugin as built. It is
@@ -223,7 +223,8 @@ state (first match wins):
     (≤10). The removal count is fixed at send time, so telemetry appended during
     the in-flight request is not lost.
   - **Success = HTTP 200 AND body `status === "ok"`** (`isApiOk`). Only then are
-    `batch.length` points removed from the front. On any other outcome the batch
+    the batch's points removed **by identity** (so a concurrent overflow drop that
+    shifted the queue front cannot discard unsent points). On any other outcome the batch
     is **kept for retry** on the next `ticker.10`. This is **at-least-once**
     delivery (a success the client never observes can cause a re-send; ABRP
     tolerates duplicate timestamps).
@@ -398,7 +399,7 @@ conversion). A field is sent only when its OVMS source(s) are present.
 - **Harness:** Jest (Node 18). `lib/abrp.js` is `require()`-able off-device because
   its module-load side effects (token read; `overrideMetricMap` + `ticker.1`
   subscribe) are guarded behind `typeof <global> !== 'undefined'`.
-- **`loadAbrp(globals)`** (top of `lib/arbp.test.js`): `jest.resetModules()`,
+- **`loadAbrp(globals)`** (top of `lib/abrp.test.js`): `jest.resetModules()`,
   clears OVMS host globals, optionally injects per-test stubs (`OvmsMetrics`,
   `HTTP`, …), re-requires the module. `jest.setup.js` provides no-op
   `print`/`performance`.
@@ -432,15 +433,13 @@ conversion). A field is sent only when its OVMS source(s) are present.
 
 ## 11. Known limitations & tracked follow-ups
 
-1. **Queue overflow during an in-flight bulk send.** If `telemetryToSend` reaches
-   100 while a batch is in flight, the overflow `shift()` moves the front, so the
-   post-success `removeTelemetry(batch.length)` can splice the wrong rows (some
-   sent points survive and re-send; some unsent points are dropped). Narrow window
-   (needs a full queue mid-flight, i.e. prolonged connectivity loss). Documented in
-   code and the plan; fix requires removing the batch by identity or blocking the
-   overflow `shift()` while `isSending`.
-2. **Test filename typo:** `lib/arbp.test.js` (should be `abrp`). Left to avoid
-   churn; rename before any upstream PR.
+1. **Queue overflow during an in-flight bulk send — RESOLVED in 2.3.1.** Previously,
+   if `telemetryToSend` reached 100 while a batch was in flight, the overflow
+   `shift()` moved the front and the positional `removeTelemetry(batch.length)`
+   could splice the wrong rows (dropping unsent points). Fixed by removing the sent
+   batch **by identity** (`removeTelemetryBatch`); see §5.4.
+2. **Test filename — RESOLVED in 2.3.1.** Renamed `lib/arbp.test.js` →
+   `lib/abrp.test.js`.
 3. **`hvac_power`** has no generic OVMS source; only sent where a vehicle override
    provides one.
 4. **Deploy via the OVMS plugin infrastructure** (upstream issue
@@ -492,7 +491,7 @@ Requires OVMS firmware `3.3.004` or newer.
 | Path | Purpose |
 | --- | --- |
 | `lib/abrp.js` | The plugin (single deliverable) |
-| `lib/arbp.test.js` | Jest unit suite |
+| `lib/abrp.test.js` | Jest unit suite |
 | `ovmsmain.js` | OVMS entry point (`require("lib/abrp")`) |
 | `trustedca/` | CA certificates required for TLS, + install README |
 | `jest.setup.js` | Jest host-global stubs |
