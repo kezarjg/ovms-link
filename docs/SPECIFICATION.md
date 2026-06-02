@@ -270,15 +270,20 @@ optimizations.
   send exists for the OVMS API-key staleness window; if ABRP does not require it,
   removing it during sub-70 kph driving cuts idle traffic.
 
-**Undocumented / unverified:**
+**Not supported by the API (verified 2026-06-02):**
 
-- **Request-body compression (gzip/deflate).** Iternio's public docs and reference
-  client make **no mention** of compression — it is neither confirmed nor denied,
-  and this project has not tested whether the API accepts a `Content-Encoding:
-  gzip` body. Independently of the server: the plugin could not easily produce
-  compressed requests anyway — Duktape ships no compression library and OVMS
-  `HTTP.Request` does not gzip bodies. Treat as unavailable until verified with
-  Iternio (contact@iternio.com) or by experiment.
+- **Request-body compression (gzip/deflate).** Empirically tested against
+  `/1/tlm/bulk` with a differential probe: the same JSON payload was POSTed
+  (a) uncompressed, (b) gzip-compressed with `Content-Encoding: gzip`, and
+  (c) gzip bytes with no encoding header. The uncompressed request reached a
+  token-level response (`401 Unauthorized Token`), proving the body was parsed;
+  both gzip variants returned the **identical** `400 data field missing or is not
+  a loadable JSON`. Because the `Content-Encoding: gzip` header changed nothing,
+  the server **ignores it and does not decompress** request bodies. Conclusion:
+  gzip request bodies are not accepted. (Independently, the plugin could not
+  produce them anyway — Duktape ships no compression library and OVMS
+  `HTTP.Request` does not gzip bodies. Note also that gzip *expands* small
+  per-point payloads, so it would only help on large backlogged batches.)
 
 ---
 
