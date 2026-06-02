@@ -28,8 +28,7 @@ point at which the manual hand-copy era is deprecated.
 
 | Version | Theme | Delivery | Gating |
 | --- | --- | --- | --- |
-| `2.3.0` | Pipeline + data integrity | Hand-installed single file | On-vehicle test |
-| `2.3.1` | Quality patch (optional) | Hand-installed single file | — |
+| `2.3.0` | Pipeline + data integrity (incl. overflow fix + test rename) | Hand-installed single file | On-vehicle test |
 | `2.4.0` | Bandwidth + plan awareness | Hand-installed single file | Issue #41 answer |
 | `3.0.0` | Plugin platform | OVMS plugin (+ web UI) | OAuth2 redirect; cert bootstrap |
 
@@ -37,8 +36,10 @@ point at which the manual hand-copy era is deprecated.
 
 ## 2.3.0 — Pipeline + data integrity (in testing)
 
-**Status:** code-complete and verified on `refactor/abrp-2.3.0` (25 unit tests
-pass, ESLint clean, `VERSION = '2.3.0'`, `package.json` 2.3.0).
+**Status:** code-complete and verified on `refactor/abrp-2.3.0` (26 unit tests
+pass, ESLint clean, `VERSION = '2.3.0'`, `package.json` 2.3.0). Includes the former
+2.3.1 quality fixes (queue-overflow-during-in-flight removal **by identity**, and
+the `arbp.test.js` → `abrp.test.js` rename), folded in since 2.3.0 had not shipped.
 
 Completes the half-finished bulk-telemetry refactor and ships it on a current
 upstream base: bulk-upload queue, the concurrent-flush and HTTP-200-vs-`status:"ok"`
@@ -57,19 +58,7 @@ test suite, CA certs + README from upstream, and a lint-clean source. Detailed i
    fast-forward).
 
 The upstream PR to `iternio/ovms-link` is a separate, later step (gated on
-validation and the `arbp.test.js` rename — see 2.3.1).
-
-## 2.3.1 — Quality patch (optional)
-
-**Status:** proposed. Could also be folded into 2.4.0.
-
-- Fix the **queue-overflow-during-in-flight** edge case (`SPECIFICATION.md` §11.1):
-  remove the in-flight batch by identity, or block the overflow `shift()` while
-  `isSending`.
-- Rename the misspelled `lib/arbp.test.js` → `lib/abrp.test.js` before any upstream
-  PR.
-
-No behavior change for users; quality only.
+validation).
 
 ## 2.4.0 — Bandwidth + plan awareness
 

@@ -1,14 +1,6 @@
 # CHANGELOG
 
-## Version 2.3.1, 2026-06-02, `kezarjg`
-
-- Fixed a telemetry-loss edge case: when the queue was full while a bulk batch was
-  in flight, the overflow drop could shift the queue front and the positional
-  removal then discarded never-sent points. The flush now removes the sent batch
-  **by identity**, so only delivered points are dropped.
-- Renamed `lib/arbp.test.js` → `lib/abrp.test.js`.
-
-## Version 2.3.0, 2026-06-01, `kezarjg`
+## Version 2.3.0, 2026-06-02, `kezarjg`
 
 - Switched telemetry transmission to bulk uploads (`/1/tlm/bulk`) with a queue.
 - Added GPS-time gating so telemetry is only sent once a valid UTC time is known.
@@ -20,7 +12,11 @@
   (HTTP 200 *and* JSON body `status: "ok"`), not on HTTP 200 alone.
 - Restored median power/speed smoothing while driving on the default (non-bandwidth-saver) path; charging continues to send instantaneous power.
 - Fixed a latent Nissan Leaf range-override bug (implicit globals under strict mode).
-- Made `lib/abrp.js` require()-able under Jest and expanded the unit test suite.
+- Fixed a further telemetry-loss edge case: when the queue is full during an
+  in-flight bulk flush, the sent batch is removed **by identity**, so a concurrent
+  overflow drop cannot discard never-sent points.
+- Made `lib/abrp.js` require()-able under Jest and expanded the unit test suite
+  (`lib/abrp.test.js`).
 
 ## Version 2.2.0, 2025-05-21, `kezarjg`
 

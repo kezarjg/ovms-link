@@ -1,7 +1,7 @@
 # ovms-link — Project Specification
 
-**Version:** 2.3.1
-**Status:** Current (reflects `lib/abrp.js` as of 2.3.1)
+**Version:** 2.3.0
+**Status:** Current (reflects `lib/abrp.js` as of 2.3.0)
 **Audience:** Maintainers and integrators of the OVMS → ABRP telemetry plugin.
 
 This document specifies the complete behavior of the plugin as built. It is
@@ -433,12 +433,12 @@ conversion). A field is sent only when its OVMS source(s) are present.
 
 ## 11. Known limitations & tracked follow-ups
 
-1. **Queue overflow during an in-flight bulk send — RESOLVED in 2.3.1.** Previously,
+1. **Queue overflow during an in-flight bulk send — RESOLVED in 2.3.0.** Previously,
    if `telemetryToSend` reached 100 while a batch was in flight, the overflow
    `shift()` moved the front and the positional `removeTelemetry(batch.length)`
    could splice the wrong rows (dropping unsent points). Fixed by removing the sent
    batch **by identity** (`removeTelemetryBatch`); see §5.4.
-2. **Test filename — RESOLVED in 2.3.1.** Renamed `lib/arbp.test.js` →
+2. **Test filename — RESOLVED in 2.3.0.** Renamed `lib/arbp.test.js` →
    `lib/abrp.test.js`.
 3. **`hvac_power`** has no generic OVMS source; only sent where a vehicle override
    provides one.
