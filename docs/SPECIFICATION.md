@@ -443,6 +443,21 @@ conversion). A field is sent only when its OVMS source(s) are present.
    churn; rename before any upstream PR.
 3. **`hvac_power`** has no generic OVMS source; only sent where a vehicle override
    provides one.
+4. **Deploy via the OVMS plugin infrastructure** (upstream issue
+   [iternio/ovms-link#38](https://github.com/iternio/ovms-link/issues/38)). The
+   current install is a manual, multi-file copy (§12), which also makes updates
+   painful. Packaging the plugin with an OVMS plugin **manifest** (`name`,
+   `version`, `prerequisites`, `elements`) served from a repository would enable
+   `plugin install` / `plugin update`; the `module` element auto-loads, so the
+   manual `ovmsmain.js` wiring would likely go away. **Open question:** the OVMS
+   plugin element types (`module`/`json`/`webpage`/`webhook`/`webrsc`) have **no
+   element for installing trusted root CAs** to `/store/trustedca` + running
+   `tls trust reload`, so the CA certs (§3, §12) cannot be auto-installed by the
+   plugin alone — they would remain a manual prerequisite unless the plugin
+   bootstraps them at first run. Resolve the cert-install path before claiming a
+   true one-command install. Routes: an independent Iternio repo
+   (`plugin repo install`), and/or superseding the stale `abrp` 0.1 plugin in the
+   default `openvehicles` repo.
 
 ---
 
