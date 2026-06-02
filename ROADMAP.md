@@ -30,7 +30,7 @@ point at which the manual hand-copy era is deprecated.
 | --- | --- | --- | --- |
 | `2.3.0` | Pipeline + data integrity | Hand-installed single file | On-vehicle test |
 | `2.3.1` | Quality patch (optional) | Hand-installed single file | — |
-| `2.4.0` | Bandwidth + plan awareness | Hand-installed single file | Issue #41 answer |
+| `2.4.0` | Bandwidth + plan awareness | Hand-installed single file | none (#41 resolved) |
 | `3.0.0` | Plugin platform | OVMS plugin (+ web UI) | OAuth2 redirect; cert bootstrap |
 
 ---
@@ -77,9 +77,12 @@ No behavior change for users; quality only.
 
 - **Per-point delta encoding** in bulk batches (`SPECIFICATION.md` §5.6): omit
   fields unchanged since the previous point in a batch, keeping `utc` + changed
-  values. **Gated on Iternio's answer to issue
-  [#41](https://github.com/iternio/ovms-link/issues/41)** — must confirm ABRP
-  carries forward last-known values rather than treating omission as "no data."
+  values. **Confirmed feasible by Iternio
+  ([#41](https://github.com/iternio/ovms-link/issues/41), 2026-06-02):** ABRP's
+  telemetry pipeline has a "persistence grouper" that carries forward last-known
+  values for omitted keys, and **`utc` is the only required field per point**. So
+  each non-first point in a batch sends `utc` + only changed fields. No longer
+  gated.
 - **Plan-awareness notifications** using free telemetry-API reads that **reuse the
   existing user token** (no new auth):
   - `get_next_charge` → notify the driver of ABRP's target SoC for the next stop.
@@ -177,7 +180,7 @@ independently testable modules (organised under `lib/abrp/` in the repo) — e.g
 
 | Item | Blocked on |
 | --- | --- |
-| 2.4.0 delta encoding | Iternio answer to issue #41 |
+| 2.4.0 delta encoding | ~~Iternio answer to #41~~ — **resolved 2026-06-02** (carry-forward confirmed; `utc`-only) |
 | 3.0 OAuth2 onboarding | Embedded-friendly redirect strategy |
 | 3.0 one-command install | CA-cert bootstrap approach |
 | 3.0 openvehicles distribution | Coordination to (re-)publish `abrp` to the default repo |

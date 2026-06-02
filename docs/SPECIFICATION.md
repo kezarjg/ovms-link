@@ -254,12 +254,14 @@ optimizations.
 
 **Candidate optimizations** (Iternio-supported, **not yet implemented**):
 
-- **Per-point delta within a bulk batch.** Every telemetry field is optional, so
-  points after the first in a batch could omit fields unchanged since the prior
-  point (keeping `utc` + changed fields). A 10-point batch today repeats static
-  fields (`lat`/`lon` when stopped, `odometer`, `capacity`, temps). *Risk:* ABRP
-  must tolerate non-self-contained points; verify against ABRP behavior before
-  adopting, and always retain `utc`.
+- **Per-point delta within a bulk batch.** Points after the first in a batch can
+  omit fields unchanged since the prior point (keeping `utc` + changed fields). A
+  10-point batch today repeats static fields (`lat`/`lon` when stopped, `odometer`,
+  `capacity`, temps). **Confirmed by Iternio
+  ([#41](https://github.com/iternio/ovms-link/issues/41), 2026-06-02):** the ABRP
+  pipeline has a "persistence grouper" that carries forward last-known values for
+  omitted keys, and **`utc` is the only required field per point** — so there is no
+  data-gap risk. Always retain `utc`. Slated for 2.4.0.
 - **Coordinate/precision trimming.** `lat`/`lon` are sent at full precision;
   rounding to ~5 dp (~1.1 m) and using integer temperatures shrinks every point
   with negligible accuracy loss.
