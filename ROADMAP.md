@@ -119,6 +119,28 @@ brainstorm → spec → plan → implement cycle:
 3. **Plan + charge-control features** (`get_latest_plan` dashboard, `get_next_charge`
    auto-limit).
 
+### Module split (`lib/abrp/`)
+
+2.x is intentionally a single file to minimise hand-copy install steps. Automated
+plugin delivery removes that cost, so 3.0 can split the source into focused,
+independently testable modules organised under a `lib/abrp/` directory — e.g.:
+
+- `lib/abrp/core.js` — telemetry pipeline + queue
+- `lib/abrp/api.js` — Iternio API client (`send`/`bulk`, `get_next_charge`,
+  `get_latest_plan`, OAuth2)
+- `lib/abrp/charge.js` — closed-loop charge control
+- `lib/abrp.js` — thin entry that `require()`s the parts (keeps
+  `require("lib/abrp")` / `ovmsmain.js` unchanged)
+
+OVMS's Duktape uses Node-style CommonJS `require()`/`module.exports` with a module
+cache, and resolves nested ids from `/store/scripts/` — `require("lib/abrp/core")`
+loads `/store/scripts/lib/abrp/core.js`. Jest handles the same `require()` natively,
+so the split also improves unit-test isolation. **Caveat:** delivering several
+files via the plugin manifest's `elements` array is schema-supported but untrodden
+(every existing plugin ships exactly one `module`); confirm how multiple `module`
+elements auto-wire so only the entry is auto-loaded and it `require()`s the rest
+(validate in sub-project 1).
+
 ## Out of scope (for now)
 
 - **ABRP Planning API** (route generation): a **paid** key, charged per plan. The
