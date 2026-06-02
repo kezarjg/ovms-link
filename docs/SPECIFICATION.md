@@ -233,6 +233,48 @@ state (first match wins):
 `round(n, p)` returns `n` unchanged when falsy (0/null/undefined), else
 `Number(n.toFixed(p||0))`. Median power is rounded to 2 dp, speed to integer.
 
+### 5.6 Bandwidth & data usage
+
+The OVMS module typically transmits over a **metered cellular link**, so
+minimizing data is a first-class concern. The Iternio API and its reference
+clients (`iternio/autopi-link`) support several bandwidth-reduction techniques.
+The plugin already implements the core set; others remain available as candidate
+optimizations.
+
+**Implemented measures** (and the Iternio pattern each mirrors):
+
+| Measure | Effect | Iternio reference |
+| --- | --- | --- |
+| Significant-change gating (§5.1) | Sends promptly only on SoC / charging / parked / charge-power change; otherwise waits | `min_changed = [soc, power, is_charging]` |
+| State-adaptive cadence (§5.2) | Driving 5 s (>70 kph), 160 s keep-alive, charging 30 min, parked 24 h | driving 1 s / charging 30 s / parked suppressed |
+| Median sampling (§4.6) | 1 Hz samples are reduced to **one** representative point per send, not all transmitted | client-side smoothing |
+| Supported-field omission (§4.2) | Only metrics the vehicle actually publishes are sent | "only available values are sent" |
+| Bulk batching (§5.4) | Up to `MAX_BULK_BATCH_SIZE` (10) points per HTTPS request — amortizes TLS/handshake/header overhead vs. one request per point | single **and** bulk endpoints |
+| Compact JSON | `JSON.stringify` emits no whitespace | `json.dumps(separators=(',',':'))` |
+
+**Candidate optimizations** (Iternio-supported, **not yet implemented**):
+
+- **Per-point delta within a bulk batch.** Every telemetry field is optional, so
+  points after the first in a batch could omit fields unchanged since the prior
+  point (keeping `utc` + changed fields). A 10-point batch today repeats static
+  fields (`lat`/`lon` when stopped, `odometer`, `capacity`, temps). *Risk:* ABRP
+  must tolerate non-self-contained points; verify against ABRP behavior before
+  adopting, and always retain `utc`.
+- **Coordinate/precision trimming.** `lat`/`lon` are sent at full precision;
+  rounding to ~5 dp (~1.1 m) and using integer temperatures shrinks every point
+  with negligible accuracy loss.
+- **Larger `MAX_BULK_BATCH_SIZE`.** Raising the 10-point cap further amortizes
+  per-request overhead when a backlog exists, bounded by the 8 s bulk timeout and
+  the 100-point queue cap.
+- **Drop the slow-driving keep-alive.** The 160 s `METRIC_POLL_STALE_CONNECTION`
+  send exists for the OVMS API-key staleness window; if ABRP does not require it,
+  removing it during sub-70 kph driving cuts idle traffic.
+
+**Not supported by the API:**
+
+- **Request-body compression (gzip/deflate).** Not documented or advertised as
+  accepted by Iternio, and impractical via OVMS `HTTP.Request`. Do not rely on it.
+
 ---
 
 ## 6. External interfaces
