@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## Version 2.3.1, 2026-06-02, `kezarjg`
+
+- Fixed a telemetry-loss edge case: when the queue was full while a bulk batch was
+  in flight, the overflow drop could shift the queue front and the positional
+  removal then discarded never-sent points. The flush now removes the sent batch
+  **by identity**, so only delivered points are dropped.
+- Renamed `lib/arbp.test.js` → `lib/abrp.test.js`.
+
 ## Version 2.3.0, 2026-06-01, `kezarjg`
 
 - Switched telemetry transmission to bulk uploads (`/1/tlm/bulk`) with a queue.
