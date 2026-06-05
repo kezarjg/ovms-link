@@ -503,9 +503,9 @@ Changes to `usr abrp.sample_interval` / `usr abrp.send_interval` apply **live** 
 4. **Deploy via the OVMS plugin infrastructure** (upstream issue
    [iternio/ovms-link#38](https://github.com/iternio/ovms-link/issues/38)) —
    **PARTIALLY ADDRESSED in 3.0.0-alpha.1** (see
-   `docs/superpowers/specs/2026-06-05-ws2-plugin-packaging-design.md`). The
-   current install is a manual, multi-file copy (§12), which also makes updates
-   painful. Packaging the plugin with an OVMS plugin **manifest** (`name`,
+   `docs/superpowers/specs/2026-06-05-ws2-plugin-packaging-design.md`). Before
+   3.0.0-alpha.1, the only install was a manual, multi-file copy (§12), which also
+   made updates painful. Packaging the plugin with an OVMS plugin **manifest** (`name`,
    `version`, `prerequisites`, `elements`) served from a repository would enable
    `plugin install` / `plugin update`. A `module` element is **auto-loaded** by the
    framework — at each JS-engine start it evaluates `require("plugin/<name>/<path>")`
@@ -560,7 +560,9 @@ The plugin installs two ways: (a) **OVMS plugin store** —
 auto-loads as `abrp = require("plugin/abrp/abrp")`; no `ovmsmain.js`); or (b) the
 **manual hand-copy** of the built `dist/abrp.js` described below. The plugin repo
 (`plugins.json` + `abrp/abrp.js`) is published to a `gh-pages` branch by `npm run release`
-(`publish.js`).
+(`publish.js`). Either way, the CA-certificate install, token configuration, and
+JS-engine reload steps below still apply — the plugin store only replaces the
+file-copy steps (1–2).
 
 The deliverable is copied into OVMS via the web console (Tools → Editor):
 
