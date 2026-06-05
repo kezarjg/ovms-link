@@ -58,14 +58,16 @@ test('publishToGhPages creates then updates origin/gh-pages with the staged tree
   // create
   let stage = path.join(root, 'stage1')
   assemblePages(stage, bundle, '1.0.0')
+  fs.writeFileSync(path.join(stage, 'stale.txt'), 'old\n')
   publishToGhPages(work, stage, 'release 1.0.0')
 
   let check = path.join(root, 'check1')
   git(['clone', '-b', 'gh-pages', bare, check], root)
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(check, 'plugins.json'), 'utf8'))[0].version, '1.0.0')
   assert.ok(fs.existsSync(path.join(check, 'abrp', 'abrp.js')))
+  assert.ok(fs.existsSync(path.join(check, 'stale.txt')))
 
-  // update
+  // update — staged without the sentinel; a clean-tree publish must drop it
   stage = path.join(root, 'stage2')
   assemblePages(stage, bundle, '2.0.0')
   publishToGhPages(work, stage, 'release 2.0.0')
@@ -73,4 +75,5 @@ test('publishToGhPages creates then updates origin/gh-pages with the staged tree
   check = path.join(root, 'check2')
   git(['clone', '-b', 'gh-pages', bare, check], root)
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(check, 'plugins.json'), 'utf8'))[0].version, '2.0.0')
+  assert.ok(!fs.existsSync(path.join(check, 'stale.txt')))
 })
