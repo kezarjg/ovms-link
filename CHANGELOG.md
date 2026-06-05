@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 3.0.0-alpha.1 (unreleased)
+
+- Change-based telemetry: sample every `usr abrp.sample_interval` seconds (1-5,
+  default 3, gated on `m.monotonic`); queue a point only when a rounded metric
+  changed since the last, with a heartbeat keep-alive (`HEARTBEAT_INTERVAL`, 0
+  disables). Removes median smoothing and the state-adaptive cadence.
+- Bulk telemetry is delta-encoded: the first point of each POST is full (a resync),
+  the rest carry `utc` + changed fields only.
+- Vehicle-off bookend forces a coherent parked state (`speed`/`power`=0,
+  `is_parked`=true, `is_charging`/`is_dcfc`=false).
+
 ## Version 2.3.0, 2026-06-02, `kezarjg`
 
 - Switched telemetry transmission to bulk uploads (`/1/tlm/bulk`) with a queue.

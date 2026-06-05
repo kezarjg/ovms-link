@@ -51,10 +51,10 @@ exposing accessor functions; the thin `abrp` entry wires them together. Build wi
 | module | owns / responsibility |
 | --- | --- |
 | `constants.js` | the tunable constants (incl. `VERSION`, `OVMS_API_KEY`) |
-| `util.js` | `Logger`, `round`, `clone`, `timestamp`, `medianPowerMetrics` |
+| `util.js` | `Logger`, `round`, `clone`, `timestamp` |
 | `config.js` | `user_token` — `token()`/`validate()`/`reset()` |
 | `metrics.js` | `metricMap` + `overrideMetricMap`/`getOVMSMetric`/`createTelemetry` |
-| `queue.js` | the telemetry queue, collected-metrics buffer, last-queued + cadence logic |
+| `queue.js` | the telemetry queue, the interval-gated `sample`/`enqueue`, per-field `roundTelemetry` + `changedVsLastQueued`, last-queued + monotonic cadence baselines |
 | `iternio.js` | Iternio API URL builder (`apiUrl`) + `isApiOk` |
 | `telemetry.js` | `sendTelemetry`/`sendBulkTelemetry` + the `isSending` in-flight guard |
 | `events.js` | PubSub subscriptions, vehicle on/off callbacks, GPS-time gating, `send()` |
@@ -81,32 +81,43 @@ Key concepts to understand before editing:
   wrappers (which retain PubSub tokens) — always use these wrappers, not `PubSub`
   directly, so unsubscribe works. Flow: `ticker.1` → `checkTime()` waits for valid
   GPS time, then `send(true)` wires up vehicle events; `vehicle.on`/`charge.start`
-  start per-second `ticker.1` → `queueTelemetryIfNecessary()` (`queue.js`); `ticker.10`
+  start per-second `ticker.1` → `Q.sample()` (`queue.js`); `ticker.10`
   → `sendBulkTelemetry()` (`telemetry.js`) flushes the queue.
-- **Two-stage pipeline: collect, then send.** Metrics are gathered into `queue.js`'s
-  `telemetryToSend` (capped at `MAX_TELEMETRY_QUEUE_SIZE`, oldest dropped on overflow)
-  and uploaded in bulk to `/1/tlm/bulk`. Only `onetime()` uses the single-shot
-  `/1/tlm/send`. Queued entries are removed only after a 200 response.
-- **Adaptive send cadence** lives in `queue.js`'s `isSignificantTelemetryChange()` +
-  `calculateMaxElapsedDuration()`: send immediately on SOC/charging/parked changes,
-  otherwise throttle by driving speed vs. `MIN_CALIBRATION_SPEED`, charging state,
-  or back off to 24h when parked. `BANDWIDTH_SAVER` and the `collectedMetrics` /
-  `medianPowerMetrics()` smoothing path tune this further.
+- **Change-based pipeline: sample, change-detect, then send.** The queue
+  (`telemetryToSend` in `queue.js`, capped at `MAX_TELEMETRY_QUEUE_SIZE`, oldest dropped
+  on overflow) holds **full snapshots** and is uploaded in bulk to `/1/tlm/bulk`. The
+  bulk POST is **delta-encoded** in `createBulkPost` (`telemetry.js`): the first point of
+  each batch is full (a per-flush resync, drop-safe), the rest carry `utc` + changed
+  fields only. Only `onetime()` uses the single-shot `/1/tlm/send`. Queued entries are
+  removed only after a 200 (+ `status:"ok"`) response.
+- **Change-based cadence** lives in `queue.js`'s `sample()`/`enqueue()`: `ticker.1` is
+  throttled via an `m.monotonic` elapsed-time gate to a configurable `sampleInterval`
+  (`usr abrp.sample_interval`, validated 1–5, default `SAMPLE_INTERVAL_DEFAULT = 3` s,
+  via `Cfg.sampleInterval()`). Each sample takes a full snapshot, rounds each field per
+  the `ROUNDING` precision map, and **enqueues only if a rounded field changed** vs. the
+  last queued point (`changedVsLastQueued`); otherwise a **heartbeat**
+  (`HEARTBEAT_INTERVAL`, default 160 s, `0` disables) forces a point to keep the ABRP
+  session alive. Vehicle-on enqueues a natural full bookend; vehicle-off enqueues a
+  bookend forced to a coherent parked state (`speed`/`power` = 0, `is_parked` = true,
+  `is_charging`/`is_dcfc` = false).
 
 Each module owns its own mutable state and is the only one that mutates it; other
 modules go through its exported accessors (extending the `__test` seam pattern).
-`config.js` owns `user_token`; `queue.js` owns `telemetryToSend`/`collectedMetrics`/
-`lastQueuedTelemetry`; `telemetry.js` owns `isSending`; `events.js` owns
-`subscriptions`/`isActive`/time-valid. All are module-level `var`s.
+`config.js` owns `user_token`; `queue.js` owns `telemetryToSend`/`lastQueuedTelemetry`
+and the monotonic cadence baselines (`lastSampleMono`/`lastQueuedMono`); `telemetry.js`
+owns `isSending`; `events.js` owns `subscriptions`/`isActive`/time-valid. All are
+module-level `var`s.
 
 ### Tunable constants (`constants.js`)
 
-`DEBUG` (verbose logging), `BANDWIDTH_SAVER`, `MIN_CALIBRATION_SPEED`,
-`METRIC_POLL_RATE_DRIVING`, `METRIC_POLL_RATE_CHARGING`,
-`METRIC_POLL_STALE_CONNECTION` (kept under the OVMS API key's ~3-min staleness
-window), `MAX_TELEMETRY_QUEUE_SIZE`. `OVMS_API_KEY` is the plugin's Iternio app
-key; the per-user `user_token` comes from OVMS config (`usr abrp.user_token`).
-Bump `VERSION` and update `CHANGELOG.md` for user-facing changes.
+`DEBUG` (verbose logging), `SAMPLE_INTERVAL_DEFAULT` (default seconds between
+samples; overridden per-user by `usr abrp.sample_interval`, validated 1–5),
+`HEARTBEAT_INTERVAL` (keep-alive seconds, kept under the OVMS API key's ~3-min
+staleness window; `0` disables), `ROUNDING` (per-field precision map, also the
+change threshold), `MAX_TELEMETRY_QUEUE_SIZE`, `MAX_BULK_BATCH_SIZE`. `OVMS_API_KEY`
+is the plugin's Iternio app key; the per-user `user_token` comes from OVMS config
+(`usr abrp.user_token`). Bump `VERSION` and update `CHANGELOG.md` for user-facing
+changes.
 
 ## Commands
 
@@ -116,7 +127,7 @@ npm test                        # builds the bundle, then runs the node:test sui
 # run one file (rebuild first so the bundle reflects your edits):
 npm run build && node --require ./test/globals.js --test lib/abrp.test.js
 # filter by test name within a run:
-npm run build && node --require ./test/globals.js --test --test-name-pattern="isSignificant" lib/abrp.test.js
+npm run build && node --require ./test/globals.js --test --test-name-pattern="changedVsLastQueued" lib/abrp.test.js
 npx eslint lib/ build.js test/   # lint (config in .eslintrc.json; *.test.js + build.js use overrides)
 npx prettier --write lib/abrp.test.js test/globals.js  # format Node-side files only — NOT lib/abrp/*
 ```

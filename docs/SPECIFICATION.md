@@ -1,12 +1,14 @@
 # ovms-link — Project Specification
 
-**Version:** 2.3.0
-**Status:** Current (reflects `lib/abrp.js` as of 2.3.0)
+**Version:** 3.0.0-alpha.1
+**Status:** Current (reflects the `lib/abrp/` modules / `dist/abrp.js` as of 3.0.0-alpha.1)
 **Audience:** Maintainers and integrators of the OVMS → ABRP telemetry plugin.
 
 This document specifies the complete behavior of the plugin as built. It is
-descriptive of the current implementation, not a forward-looking design (for the
-2.3.0 change rationale see `docs/superpowers/specs/2026-06-01-abrp-2.3.0-refactor-design.md`).
+descriptive of the current implementation, not a forward-looking design. For the
+change-based telemetry rationale see
+`docs/superpowers/specs/2026-06-05-telemetry-change-based-redesign-design.md`; for
+the 2.3.0 refactor see `docs/superpowers/specs/2026-06-01-abrp-2.3.0-refactor-design.md`.
 
 ---
 
@@ -79,8 +81,7 @@ control functions → initialization → exports.
 | --- | --- | --- |
 | Metric definition | `metricMap`, `overrideMetricMap` | Declarative map of ABRP keys → OVMS source metrics; per-vehicle overrides |
 | Metric resolution | `isOvmsMetricSupported`, `getOVMSMetric`, `createTelemetry` | Read OVMS metrics, build a telemetry object containing only supported keys |
-| Cadence | `isSignificantTelemetryChange`, `calculateMaxElapsedDuration` | Decide when a telemetry point should be queued |
-| Smoothing | `medianPowerMetrics`, `queueTelemetry`, `queueTelemetryIfNecessary` | Collect 1 Hz samples while driving; apply median power/speed on queue |
+| Sampling & change detection | `sample`, `roundTelemetry`, `changedVsLastQueued`, `enqueue` | Throttle `ticker.1` to the sample interval; round each field; queue only on a rounded-field change or heartbeat |
 | Queue & transmit | `createBulkPost`, `sendBulkTelemetry`, `sendTelemetry`, `removeTelemetry`, `isApiOk` | FIFO queue, bulk upload, at-least-once delivery |
 | Events | `subscribe`/`unsubscribe`, `manageVehicleStateEvents`, `callbackVehicleOn/Off`, `checkTime` | PubSub wiring, startup gating, session lifecycle |
 | Control | `info`, `onetime`, `send`, `resetConfig`, `validateUsrAbrpConfig` | In-vehicle shell entry points and configuration |
@@ -128,7 +129,7 @@ never `PubSub` directly).
 | Event | Handler | When active |
 | --- | --- | --- |
 | `ticker.1` (1 Hz) | `checkTime` | At startup, until GPS time is valid |
-| `ticker.1` (1 Hz) | `queueTelemetryIfNecessary` | While the vehicle is on/charging |
+| `ticker.1` (1 Hz) | `Q.sample` | While the vehicle is on/charging (interval-gated) |
 | `ticker.10` (0.1 Hz) | `sendBulkTelemetry` | Whenever sending is active |
 | `vehicle.on`, `vehicle.charge.start` | `callbackVehicleOn` | Session start |
 | `vehicle.off`, `vehicle.charge.stop` | `callbackVehicleOff` | Session end |
@@ -147,69 +148,88 @@ never `PubSub` directly).
    subscribes the vehicle/charge events and `ticker.10` → `sendBulkTelemetry`. If
    the vehicle is already on (`v.e.on`), it immediately runs `callbackVehicleOn`.
 
-### 4.6 Telemetry pipeline (collect → queue → bulk send)
+### 4.6 Telemetry pipeline (sample → change-detect → bulk send)
+
+The pipeline is **change-based** (replacing the 2.x median-smoothing + state-adaptive
+cadence). See the design spec
+`docs/superpowers/specs/2026-06-05-telemetry-change-based-redesign-design.md`.
 
 ```
-ticker.1  ──► queueTelemetryIfNecessary
+ticker.1  ──► sample
+                 │  mono = m.monotonic
+                 │  if mono - lastSampleMono < sampleInterval: return   ── interval gate
                  │  createTelemetry()  (current snapshot)
-                 │  if !is_parked: collectedMetrics.push(sample)   ── 1 Hz collection
-                 │  if elapsed >= calculateMaxElapsedDuration:
-                 │       queueTelemetry(sample, applyMedian=true)
+                 │  roundTelemetry(snapshot)   (per-field ROUNDING precision)
+                 │  if changedVsLastQueued(rounded):  enqueue(rounded)  ── change-only
+                 │  else if heartbeat elapsed:         enqueue(rounded)  ── keep-alive
                  ▼
-            telemetryToSend  (FIFO, cap 100)
+            telemetryToSend  (FIFO full snapshots, cap 100)
                  ▲
 ticker.10 ──► sendBulkTelemetry
                  │  if isSending or empty: return
                  │  batch = telemetryToSend.slice(0, 10)   ── snapshot
-                 │  POST /1/tlm/bulk
+                 │  POST /1/tlm/bulk   (delta-encoded — §5.4)
                  │  on (HTTP 200 AND status:"ok"): removeTelemetry(batch.length)
                  │  else: keep batch for retry next tick
 ```
 
-**Median smoothing.** While not parked, every 1 Hz sample is pushed to
-`collectedMetrics`. When a point is queued, `queueTelemetry(..., true)` replaces
-its `power`/`speed` with the **median by power** of the collected samples
-(`medianPowerMetrics`), then resets `collectedMetrics`. This denoises the
-power/speed used for ABRP's km/kWh calibration. Smoothing is **driving-only by
-design**: `is_parked` is true during charging, so charge points carry
-instantaneous power (responsiveness handled by significant-change detection, §5.1).
+**Sample interval gate.** `ticker.1` fires every second, but `sample()` only does
+work once `m.monotonic` has advanced by `sampleInterval` seconds since the last
+sample. The interval comes from `usr abrp.sample_interval` (validated 1–5, default
+`SAMPLE_INTERVAL_DEFAULT = 3`) via `Cfg.sampleInterval()`, applied through
+`Q.setSampleInterval()` at session start.
+
+**Per-field rounding.** Each sampled field is rounded to the precision in the
+`ROUNDING` map (`constants.js`) — e.g. `soc` to integer, `power` to 1 dp,
+`lat`/`lon` to 5 dp. Rounding both shrinks every point and defines what counts as a
+"change".
+
+**Change-only queueing + heartbeat.** A rounded snapshot is enqueued **only if some
+rounded field differs** from the last queued point (`changedVsLastQueued`). If
+nothing has changed, a **heartbeat** keeps the ABRP session alive: when no point has
+been queued for `HEARTBEAT_INTERVAL` seconds (default 160; `0` disables), one is
+forced. The queue therefore holds **full snapshots**, deduplicated by change rather
+than smoothed.
 
 ---
 
 ## 5. Behavioral specification
 
-### 5.1 Significant-change detection (`isSignificantTelemetryChange`)
+### 5.1 Change detection (`changedVsLastQueued`)
 
-A change vs. the last queued telemetry is **significant** (forces an immediate
-send) if any of:
+The decision to queue a point is purely change-based (no state-specific rules). A
+rounded snapshot is queued when **any rounded field** differs from the last queued
+point — comparing the values *after* `roundTelemetry` has applied the `ROUNDING`
+precision map, so sub-precision jitter never queues a point. Because every supported
+field participates, SoC, charging, parked, speed and power changes all naturally
+trigger a send, with no field singled out.
 
-- `soc` changed (so ABRP reflects SoC promptly), or
-- `is_charging` changed, or
-- `is_parked` changed, or
-- charging **and** `round(power)` changed (responsive charge-power curve).
+### 5.2 Send cadence (sample interval + heartbeat)
 
-### 5.2 Send cadence (`calculateMaxElapsedDuration`)
+Cadence is set by two knobs rather than a state-adaptive ladder:
 
-Returns the maximum seconds that may elapse before the next queue, given current
-state (first match wins):
-
-| Condition | Max elapsed | Constant |
+| Knob | Value | Effect |
 | --- | --- | --- |
-| Significant change | `0` (always send) | — |
-| Speed > 70 kph | `5 s` | `METRIC_POLL_RATE_DRIVING` |
-| Not parked, or DC fast charging | `160 s` | `METRIC_POLL_STALE_CONNECTION` ((3·60)−20) |
-| Standard charging | `1800 s` (30 min) | `METRIC_POLL_RATE_CHARGING` |
-| Parked (default) | `86400 s` (24 h) | — |
+| `sampleInterval` | `usr abrp.sample_interval` (1–5, default `SAMPLE_INTERVAL_DEFAULT = 3`) | Minimum seconds between samples; `sample()` is gated on `m.monotonic` elapsed time |
+| `HEARTBEAT_INTERVAL` | `160 s` (default; `0` disables) | If no point has been queued for this long, force one to keep the ABRP session alive |
 
-`METRIC_POLL_STALE_CONNECTION` is kept below the OVMS API-key staleness window
-(~3 min) so the session stays alive.
+So in steady state the plugin queues at most one point per `sampleInterval` seconds,
+and only when a rounded field changed; if the vehicle sits unchanged, the heartbeat
+emits a keep-alive every `HEARTBEAT_INTERVAL` seconds. The heartbeat interval is kept
+below the OVMS API-key staleness window (~3 min) so the session stays alive. See the
+design spec
+`docs/superpowers/specs/2026-06-05-telemetry-change-based-redesign-design.md`.
 
 ### 5.3 Session lifecycle
 
-- **`callbackVehicleOn`** (vehicle on / charge start): queues an immediate snapshot
-  (`queueTelemetryManual`) and subscribes `ticker.1` → `queueTelemetryIfNecessary`.
-- **`callbackVehicleOff`** (vehicle off / charge stop): unsubscribes `ticker.1`,
-  queues a final snapshot, clears `collectedMetrics`.
+- **`callbackVehicleOn`** (vehicle on / charge start): applies the configured sample
+  interval (`Q.setSampleInterval(Cfg.sampleInterval())`), enqueues a **natural full
+  snapshot** as the opening bookend (`Q.enqueue(Q.roundTelemetry(...))`), then
+  subscribes `ticker.1` → `Q.sample`.
+- **`callbackVehicleOff`** (vehicle off / charge stop): unsubscribes `ticker.1` and
+  enqueues a final full bookend **forced to a coherent parked state**
+  (`speed`/`power` = 0, `is_parked` = true, `is_charging`/`is_dcfc` = false), so ABRP
+  ends the session cleanly regardless of the last live sample.
 
 ### 5.4 Queue management & delivery semantics
 
@@ -222,6 +242,11 @@ state (first match wins):
   - **Batch snapshot:** `batch = telemetryToSend.slice(0, MAX_BULK_BATCH_SIZE)`
     (≤10). The removal count is fixed at send time, so telemetry appended during
     the in-flight request is not lost.
+  - **Delta-encoded POST:** `createBulkPost` delta-encodes the batch
+    (`telemetry.js`) — the **first point of each POST is sent in full** (a per-flush
+    resync, drop-safe), and every subsequent point carries `utc` plus only the fields
+    that changed vs. the prior point. The in-memory queue still holds **full
+    snapshots**; delta encoding happens only at the wire (see §5.6).
   - **Success = HTTP 200 AND body `status === "ok"`** (`isApiOk`). Only then are
     the batch's points removed **by identity** (so a concurrent overflow drop that
     shifted the queue front cannot discard unsent points). On any other outcome the batch
@@ -232,7 +257,9 @@ state (first match wins):
 ### 5.5 Number handling
 
 `round(n, p)` returns `n` unchanged when falsy (0/null/undefined), else
-`Number(n.toFixed(p||0))`. Median power is rounded to 2 dp, speed to integer.
+`Number(n.toFixed(p||0))`. Each telemetry field is rounded to its own precision via
+the `ROUNDING` map in `constants.js` (`roundTelemetry`), which both trims payload
+size and defines the change threshold (§5.1).
 
 ### 5.6 Bandwidth & data usage
 
@@ -246,32 +273,26 @@ optimizations.
 
 | Measure | Effect | Iternio reference |
 | --- | --- | --- |
-| Significant-change gating (§5.1) | Sends promptly only on SoC / charging / parked / charge-power change; otherwise waits | `min_changed = [soc, power, is_charging]` |
-| State-adaptive cadence (§5.2) | Driving 5 s (>70 kph), 160 s keep-alive, charging 30 min, parked 24 h | driving 1 s / charging 30 s / parked suppressed |
-| Median sampling (§4.6) | 1 Hz samples are reduced to **one** representative point per send, not all transmitted | client-side smoothing |
+| Change-only queueing (§5.1) | A point is queued only when a rounded field changed since the last; otherwise nothing is sent until the heartbeat | `min_changed = [soc, power, is_charging]` |
+| Sample interval + heartbeat (§5.2) | At most one point per `sampleInterval` (1–5 s) seconds, with a `HEARTBEAT_INTERVAL` keep-alive | driving 1 s / charging 30 s / parked suppressed |
+| Per-field rounding (§4.6, §5.5) | Each field trimmed to its `ROUNDING` precision before send (and used as the change threshold) | client-side rounding |
+| Per-point delta within a bulk batch (§5.4) | First point of each POST is full; the rest carry `utc` + changed fields only | `min_changed` persistence grouper |
 | Supported-field omission (§4.2) | Only metrics the vehicle actually publishes are sent | "only available values are sent" |
 | Bulk batching (§5.4) | Up to `MAX_BULK_BATCH_SIZE` (10) points per HTTPS request — amortizes TLS/handshake/header overhead vs. one request per point | single **and** bulk endpoints |
 | Compact JSON | `JSON.stringify` emits no whitespace | `json.dumps(separators=(',',':'))` |
 
+Per-point delta encoding is **confirmed safe by Iternio
+([#41](https://github.com/iternio/ovms-link/issues/41), 2026-06-02):** the ABRP
+pipeline has a "persistence grouper" that carries forward last-known values for
+omitted keys, and **`utc` is the only required field per point** — so omitting
+unchanged fields creates no data gap. The implementation always retains `utc` and
+sends the first point of each POST in full as a drop-safe resync (§5.4).
+
 **Candidate optimizations** (Iternio-supported, **not yet implemented**):
 
-- **Per-point delta within a bulk batch.** Points after the first in a batch can
-  omit fields unchanged since the prior point (keeping `utc` + changed fields). A
-  10-point batch today repeats static fields (`lat`/`lon` when stopped, `odometer`,
-  `capacity`, temps). **Confirmed by Iternio
-  ([#41](https://github.com/iternio/ovms-link/issues/41), 2026-06-02):** the ABRP
-  pipeline has a "persistence grouper" that carries forward last-known values for
-  omitted keys, and **`utc` is the only required field per point** — so there is no
-  data-gap risk. Always retain `utc`. Slated for 2.4.0.
-- **Coordinate/precision trimming.** `lat`/`lon` are sent at full precision;
-  rounding to ~5 dp (~1.1 m) and using integer temperatures shrinks every point
-  with negligible accuracy loss.
 - **Larger `MAX_BULK_BATCH_SIZE`.** Raising the 10-point cap further amortizes
   per-request overhead when a backlog exists, bounded by the 8 s bulk timeout and
   the 100-point queue cap.
-- **Drop the slow-driving keep-alive.** The 160 s `METRIC_POLL_STALE_CONNECTION`
-  send exists for the OVMS API-key staleness window; if ABRP does not require it,
-  removing it during sub-70 kph driving cuts idle traffic.
 
 **Not supported by the API (verified 2026-06-02):**
 
@@ -355,8 +376,8 @@ conversion). A field is sent only when its OVMS source(s) are present.
 | --- | --- | --- | --- |
 | `utc` | s | `m.time.utc` | Required for any send (see GPS gating) |
 | `soc` | % | `v.b.soc` (NL: `xnl.v.b.soc.instrument`) | |
-| `power` | kW | `v.b.power` | + charging, − discharging; median-smoothed while driving |
-| `speed` | kph | `v.p.speed` | median-smoothed while driving |
+| `power` | kW | `v.b.power` | + charging, − discharging; rounded to 1 dp |
+| `speed` | kph | `v.p.speed` | rounded to integer |
 | `lat` / `lon` | ° | `v.p.latitude` / `v.p.longitude` | |
 | `is_charging` | bool | `v.c.charging` | |
 | `is_dcfc` | bool | `v.c.mode === 'performance'` | DC fast charging |
@@ -384,15 +405,16 @@ conversion). A field is sent only when its OVMS source(s) are present.
 | Constant | Value | Meaning |
 | --- | --- | --- |
 | `OVMS_API_KEY` | (fixed) | The plugin's shared Iternio application key |
-| `VERSION` | `'2.3.0'` | Plugin version (bump on user-facing change; update CHANGELOG) |
+| `VERSION` | `'3.0.0-alpha.1'` | Plugin version (bump on user-facing change; update CHANGELOG) |
 | `DEBUG` | `true` | Verbose debug logging |
-| `BANDWIDTH_SAVER` | `false` | When true, manual/bookend sends also apply median smoothing |
-| `MIN_CALIBRATION_SPEED` | `70` kph | Above this, send every 5 s for calibration |
-| `METRIC_POLL_RATE_DRIVING` | `5` s | Driving send interval |
-| `METRIC_POLL_RATE_CHARGING` | `1800` s | Charging send interval |
-| `METRIC_POLL_STALE_CONNECTION` | `160` s | Keep-alive interval (< OVMS API-key staleness) |
+| `SAMPLE_INTERVAL_DEFAULT` | `3` s | Default seconds between samples; overridden by `usr abrp.sample_interval` (1–5) |
+| `HEARTBEAT_INTERVAL` | `160` s | Keep-alive: force a point if none queued for this long (`0` disables; < OVMS API-key staleness) |
+| `ROUNDING` | (map) | Per-field rounding precision (also the change threshold, §5.1) |
 | `MAX_TELEMETRY_QUEUE_SIZE` | `100` | Queue cap; oldest dropped on overflow |
 | `MAX_BULK_BATCH_SIZE` | `10` | Max telemetry points per bulk POST |
+
+The per-user `user_token` and the per-sample interval both come from OVMS config
+(`usr abrp.user_token`, `usr abrp.sample_interval`), not constants.
 
 ---
 
@@ -411,10 +433,11 @@ conversion). A field is sent only when its OVMS source(s) are present.
 - **Export seam:** `module.exports` exposes the public entry points, the pure
   decision/helper functions, and a `__test` object (getters/setters over the
   internal queue/state) used by stateful tests. OVMS ignores the extra export.
-- **Coverage:** pure helpers (`round`, `medianPowerMetrics`,
-  `isSignificantTelemetryChange`), metric resolution (`getOVMSMetric` for
-  `capacity`/`soe`), the bulk data-integrity contract (snapshot, in-flight guard,
-  `status:"ok"` gate, batch cap, retry), and the collect→queue→reset median cycle.
+- **Coverage:** pure helpers (`round`, `roundTelemetry`, `changedVsLastQueued`),
+  the sample-interval gate + heartbeat + change-only queueing, the delta-encoded bulk
+  POST (`createBulkPost`), the vehicle-off forced-parked bookend, metric resolution
+  (`getOVMSMetric` for `capacity`/`soe`), and the bulk data-integrity contract
+  (snapshot, in-flight guard, `status:"ok"` gate, batch cap, retry).
 - **Lint/format:** `npx eslint lib/ build.js test/` (source pinned to ES2015; test
   files + `build.js` use overrides with a Node `env`, and `*.test.js`/`test/**` use
   `ecmaVersion: 2021`). Never Prettier-reformat `lib/abrp/*.js` (hand-styled for Duktape).
