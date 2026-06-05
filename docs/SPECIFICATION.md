@@ -36,7 +36,7 @@ across JS-engine reloads (state is in-memory only).
   ┌──────────────┐   metrics    ┌─────────────────┐   HTTPS    ┌──────────────┐
   │  Vehicle CAN │ ───────────► │  OVMS module    │ ─────────► │ Iternio /    │
   │  bus / ECUs  │   (OVMS      │  (Duktape JS)   │  tlm/send  │ ABRP servers │
-  └──────────────┘    metrics)  │  lib/abrp.js    │  tlm/bulk  └──────────────┘
+  └──────────────┘    metrics)  │  dist/abrp.js   │  tlm/bulk  └──────────────┘
                                 └─────────────────┘
 ```
 
@@ -55,15 +55,18 @@ across JS-engine reloads (state is in-memory only).
    template literals, no object spread/rest, no block-scope guarantees.** The
    house style is `var` + `function` declarations with string concatenation.
    `const` exists but offers little beyond `var` (see the note at the top of
-   `lib/abrp.js`).
+   `lib/abrp/abrp.js`).
 2. **Host globals are injected, not imported.** The plugin uses these OVMS-provided
    globals: `HTTP`, `OvmsConfig`, `OvmsMetrics`, `OvmsNotify`, `PubSub`,
    `performance`, `print`. There is no `console`, no `require` other than OVMS's
    own module loader, no filesystem.
-3. **Single-file deliverable, hand-installed.** The product is `lib/abrp.js` plus a
-   one-line `ovmsmain.js` and a set of CA certificates, copied file-by-file into
-   the OVMS web editor. There is **no build/bundler step**; the source file *is*
-   the artifact. This is why all logic lives in one file.
+3. **Bundled single-file deliverable, hand-installed.** The source is split into
+   focused CommonJS modules under `lib/abrp/`; a dependency-free bundler (`build.js`,
+   `npm run build`) concatenates them into one Duktape-safe `dist/abrp.js`. That
+   bundle — plus a one-line `ovmsmain.js` and a set of CA certificates — is copied
+   file-by-file into the OVMS web editor. The **on-device artifact is still a single
+   file** (the device loads only the bundle, never the individual modules); the build
+   step exists so the source can be modular and independently testable.
 4. **In-memory, single-process.** All state is module-level variables. A JS-engine
    reload resets everything; there is no persistence.
 
@@ -71,9 +74,12 @@ across JS-engine reloads (state is in-memory only).
 
 ## 4. Architecture
 
-`lib/abrp.js` is organized top-to-bottom: constants → `metricMap` → utilities →
-metric functions → telemetry pipeline → transmission → event handlers → core
-control functions → initialization → exports.
+The source is split into focused CommonJS modules under `lib/abrp/` — `constants`,
+`util`, `config`, `metrics`, `queue`, `iternio`, `telemetry`, `events`, and a thin
+`abrp` entry — each owning its own state and exposing accessor functions. `build.js`
+resolves the relative `require('./x')` graph at build time and emits the single
+`dist/abrp.js` deliverable. The table below groups responsibilities by area; each
+area maps onto one or two of those modules.
 
 ### 4.1 Component responsibilities
 
@@ -84,7 +90,7 @@ control functions → initialization → exports.
 | Sampling & change detection | `sample`, `roundTelemetry`, `changedVsLastQueued`, `enqueue` | Throttle `ticker.1` to the sample interval; round each field; queue only on a rounded-field change or heartbeat |
 | Queue & transmit | `createBulkPost`, `sendBulkTelemetry`, `sendTelemetry`, `removeTelemetryBatch`, `isApiOk` | FIFO queue, delta-encoded bulk upload, at-least-once delivery |
 | Events | `subscribe`/`unsubscribe`, `manageVehicleStateEvents`, `callbackVehicleOn/Off`, `checkTime` | PubSub wiring, startup gating, session lifecycle |
-| Control | `info`, `onetime`, `send`, `resetConfig`, `validateUsrAbrpConfig` | In-vehicle shell entry points and configuration |
+| Control | `info`, `onetime`, `send`, `resetConfig`; `config.js` `validate`/`token`/`reset` | In-vehicle shell entry points and configuration |
 
 ### 4.2 The metric map (the heart of the design)
 
@@ -368,7 +374,7 @@ Single config item, in the OVMS `usr` namespace:
 config set usr abrp.user_token <token>
 ```
 
-Read once at module load (and re-read lazily by `validateUsrAbrpConfig` if unset).
+Read once at module load (and re-read lazily by `Cfg.validate()` if unset).
 `resetConfig()` deletes it. The token is obtained from ABRP's Live Data setup or
 the OAuth2 API.
 
@@ -414,7 +420,7 @@ conversion). A field is sent only when its OVMS source(s) are present.
 | `hvac_power` | kW | *(none by default)* | Override-only; supply per-vehicle via `overrideMetricMap` |
 | `hvac_setpoint` | °C | `v.e.cabinsetpoint` | |
 | `cabin_temp` | °C | `v.e.cabintemp` | |
-| `tire_pressure_fl/fr/rl/rr` | kPa | `v.tp.fl.p` / `fr` / `rl` / `rr` | |
+| `tire_pressure_fl/fr/rl/rr` | kPa | `v.t.pressure` vector (FL=0, FR=1, RL=2, RR=3) | |
 
 ---
 
@@ -468,7 +474,7 @@ not constants: `usr abrp.user_token`, `usr abrp.sample_interval` (sampling caden
 
 ## 10. Error handling & resilience
 
-- **No token:** `validateUsrAbrpConfig` raises an OVMS error notification and
+- **No token:** `Cfg.validate()` raises an OVMS error notification and
   aborts the send; `send()` also refuses if GPS time is invalid.
 - **Network/HTTP failure:** logged; the batch stays queued and is retried next
   `ticker.10`. No client-side retry storm (one attempt per tick).
@@ -540,7 +546,9 @@ not constants: `usr abrp.user_token`, `usr abrp.sample_interval` (sampling caden
 
 The deliverable is copied into OVMS via the web console (Tools → Editor):
 
-1. `lib/abrp.js` → `/store/scripts/lib/abrp.js`
+1. Build the bundle (`npm run build`), then copy `dist/abrp.js` →
+   `/store/scripts/lib/abrp.js` (the on-device path stays `lib/abrp.js` — that's
+   what `ovmsmain.js` requires).
 2. `ovmsmain.js` → `/store/scripts/ovmsmain.js` (just `require("lib/abrp")`; the
    plugin auto-starts internally once GPS time is valid).
 3. Each certificate in `trustedca/` → `/store/trustedca/`, then `tls trust reload`
@@ -556,15 +564,16 @@ Requires OVMS firmware `3.3.004` or newer.
 
 | Path | Purpose |
 | --- | --- |
-| `lib/abrp.js` | The plugin (single deliverable) |
-| `lib/abrp.test.js` | `node:test` unit suite (runs against the bundle) |
+| `lib/abrp/` | Plugin source — focused CommonJS modules (`constants`/`util`/`config`/`metrics`/`queue`/`iternio`/`telemetry`/`events`/`abrp` entry) + their per-module `*.test.js` |
+| `build.js`, `dist/abrp.js` | Dependency-free bundler and its output — the single-file deliverable copied to the device (`dist/` is gitignored) |
+| `lib/abrp.test.js` | `node:test` bundle suite (runs against `dist/abrp.js`) |
 | `ovmsmain.js` | OVMS entry point (`require("lib/abrp")`) |
 | `trustedca/` | CA certificates required for TLS, + install README |
 | `test/globals.js` | Test host-global stubs (`print`/`performance`) |
 | `CHANGELOG.md` | Version history |
 | `CLAUDE.md` | Guidance for AI coding assistants |
 | `docs/SPECIFICATION.md` | This document |
-| `docs/superpowers/specs/`, `docs/superpowers/plans/` | Design spec & implementation plan for the 2.3.0 refactor |
+| `docs/superpowers/specs/`, `docs/superpowers/plans/` | Design specs & implementation plans (2.3.0 refactor through the 3.0 module split, node:test migration, change-based telemetry, and flush-interval work) |
 
 ---
 
