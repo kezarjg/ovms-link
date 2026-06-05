@@ -23,14 +23,26 @@ based on live information.
 3. In the settings for the new vehicle, click on the **Live data** button to
    generate a generic token. Keep a record of this token
 
+### Build the plugin bundle
+
+The plugin source is split into modules under `lib/abrp/`. Build the single-file
+deliverable first — this requires [Node.js](https://nodejs.org) (the bundler is
+dependency-free, so **no `npm install` is needed**):
+
+```bash
+npm run build      # emits dist/abrp.js
+```
+
+`dist/abrp.js` is the self-contained, Duktape-safe file you install below.
+
 ### Install the abrp.js Plugin in OVMS
 
 1. Login to the
    [OVMS web console](https://docs.openvehicles.com/en/latest/userguide/installation.html#initial-connection-wifi-and-browser)
 2. Navigate to the **Tools** -> **Editor** menu item
 3. Use `/store/scripts/lib/abrp.js` for **Path** and press **Load**
-4. Copy the content of the `lib/abrp.js` file in this repository to that
-   file and **Save**
+4. Copy the content of the built `dist/abrp.js` file to that file and **Save**
+   (the on-device path stays `lib/abrp.js` — that is what `ovmsmain.js` loads)
 5. Use `/store/scripts/ovmsmain.js` for **Path** and press **Load**
 6. Copy the content of the `ovmsmain.js` file in this repository to that
    file and **Save**
@@ -69,11 +81,12 @@ More information on the trusted CA can be found in the [trustedca](/trustedca/RE
 
 ## Usage
 
-With the configuration described above the ABRP plugin will automatically send
-live telemetry from the vehicle to ABRP on a periodic basis. When data is sent
-depends on what is happening for the vehicle. For example, when driving,
-information will be sent more frequently than when charging, and even less often
-when the car is off.
+With the configuration described above the ABRP plugin automatically streams live
+telemetry to ABRP while the vehicle is on or charging. It samples the metrics a few
+times a second and queues a point only when a value meaningfully changes (a periodic
+keep-alive stops the session going idle), so traffic naturally scales with how much
+is actually happening. The sampling and send cadence are tunable via the
+`usr abrp.sample_interval` (capture) and `usr abrp.send_interval` (flush) config keys.
 
 ### OVMS Shell Commands
 
