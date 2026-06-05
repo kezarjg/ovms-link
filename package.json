@@ -6,16 +6,10 @@
   "private": true,
   "scripts": {
     "build": "node build.js --src lib/abrp --entry abrp --out dist/abrp.js",
-    "test": "node build.js --src lib/abrp --entry abrp --out dist/abrp.js && jest"
+    "test": "node build.js --src lib/abrp --entry abrp --out dist/abrp.js && node --require ./test/globals.js --test lib/abrp.test.js lib/abrp/util.test.js lib/abrp/metrics.test.js test/build.test.js"
   },
   "devDependencies": {
     "eslint": "^8.16.0",
-    "eslint-plugin-jest": "^26.5.1",
-    "jest": "^28.1.0",
     "prettier": "^2.6.2"
-  },
-  "jest": {
-    "testEnvironment": "node",
-    "setupFiles": ["<rootDir>/jest.setup.js"]
   }
 }

@@ -1,13 +1,8 @@
 {
   "env": {
-    "commonjs": true,
-    "jest/globals": true
+    "commonjs": true
   },
-  "extends": [
-    "eslint:recommended",
-    "plugin:jest/recommended",
-    "plugin:jest/style"
-  ],
+  "extends": ["eslint:recommended"],
   "globals": {
     "HTTP": "readonly",
     "OvmsConfig": "readonly",
@@ -23,12 +18,12 @@
     },
     "ecmaVersion": 2015
   },
-  "plugins": ["jest"],
   "rules": {},
   "overrides": [
     {
-      "files": ["*.test.js", "jest.setup.js"],
-      "parserOptions": { "ecmaVersion": 2021 }
+      "files": ["*.test.js", "test/**/*.js"],
+      "parserOptions": { "ecmaVersion": 2021 },
+      "env": { "node": true }
     },
     {
       "files": ["build.js"],
