@@ -82,7 +82,7 @@ control functions → initialization → exports.
 | Metric definition | `metricMap`, `overrideMetricMap` | Declarative map of ABRP keys → OVMS source metrics; per-vehicle overrides |
 | Metric resolution | `isOvmsMetricSupported`, `getOVMSMetric`, `createTelemetry` | Read OVMS metrics, build a telemetry object containing only supported keys |
 | Sampling & change detection | `sample`, `roundTelemetry`, `changedVsLastQueued`, `enqueue` | Throttle `ticker.1` to the sample interval; round each field; queue only on a rounded-field change or heartbeat |
-| Queue & transmit | `createBulkPost`, `sendBulkTelemetry`, `sendTelemetry`, `removeTelemetry`, `isApiOk` | FIFO queue, bulk upload, at-least-once delivery |
+| Queue & transmit | `createBulkPost`, `sendBulkTelemetry`, `sendTelemetry`, `removeTelemetryBatch`, `isApiOk` | FIFO queue, delta-encoded bulk upload, at-least-once delivery |
 | Events | `subscribe`/`unsubscribe`, `manageVehicleStateEvents`, `callbackVehicleOn/Off`, `checkTime` | PubSub wiring, startup gating, session lifecycle |
 | Control | `info`, `onetime`, `send`, `resetConfig`, `validateUsrAbrpConfig` | In-vehicle shell entry points and configuration |
 
@@ -169,7 +169,7 @@ ticker.10 ──► sendBulkTelemetry
                  │  if isSending or empty: return
                  │  batch = telemetryToSend.slice(0, 10)   ── snapshot
                  │  POST /1/tlm/bulk   (delta-encoded — §5.4)
-                 │  on (HTTP 200 AND status:"ok"): removeTelemetry(batch.length)
+                 │  on (HTTP 200 AND status:"ok"): removeTelemetryBatch(batch)   ── by identity
                  │  else: keep batch for retry next tick
 ```
 
