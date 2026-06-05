@@ -472,6 +472,25 @@ conversion). A field is sent only when its OVMS source(s) are present.
    install) — and the OVMS firmware's `plugin/abrp/README.rst` already redirects
    users to this project. So this would be a **clean addition to an empty slot**,
    not a takeover.
+5. **Cold-boot session detection misses charging — TODO.** `manageVehicleStateEvents`
+   synthesizes `callbackVehicleOn()` at startup only when `OvmsMetrics.Value('v.e.on')`
+   is truthy (§4.4, `events.js`), to cover a reboot while already driving. It does
+   **not** check the charging level, so a reboot **while parked-and-charging** stays
+   idle until the next `vehicle.charge.start` edge. Fix: also check `v.c.charging`
+   (the metric `is_charging` reads). Verify on-device whether `OvmsMetrics.Value('v.c.charging')`
+   returns a truthy value or a `"yes"`/`"no"` string before relying on truthiness.
+6. **Configurable send (bulk-flush) interval — TODO (3.0 feature).** The flush cadence
+   is hardwired to `ticker.10` (every 10 s). Make it user-selectable across 10–60 s in
+   10 s steps via a config key (e.g. `usr abrp.send_interval`, default 10 so existing
+   setups are unchanged). **Constraint:** OVMS only emits `ticker.1/.10/.60/.300/.600/.3600`
+   — there is no `ticker.20/30/40/50` — so implement by keeping the `ticker.10`
+   subscription and flushing only every Nth tick (`N = interval / 10`), not by
+   subscribing to a differently-named ticker. **Coupling to resolve:** at longer
+   intervals the per-flush `MAX_BULK_BATCH_SIZE = 10` cap can be exceeded by what
+   accumulates between flushes (driving queues ≈ 1 point / `METRIC_POLL_RATE_DRIVING`),
+   so the queue would grow and lag — a longer interval likely needs a higher batch cap
+   or a drain-loop. Treat as a proper feature (brainstorm → spec → CHANGELOG), not a
+   one-liner.
 
 ---
 
