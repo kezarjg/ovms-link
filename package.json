@@ -7,6 +7,7 @@
   "scripts": {
     "build": "node build.js --src lib/abrp --entry abrp --out dist/abrp.js",
     "stage": "node build.js --src lib/abrp --entry abrp --out dist/abrp.js && node publish.js --out dist-pages",
+    "release": "node build.js --src lib/abrp --entry abrp --out dist/abrp.js && node publish.js --publish",
     "test": "node build.js --src lib/abrp --entry abrp --out dist/abrp.js && node --require ./test/globals.js --test lib/abrp.test.js lib/abrp/config.test.js lib/abrp/util.test.js lib/abrp/metrics.test.js lib/abrp/queue.test.js test/build.test.js test/publish.test.js"
   },
   "devDependencies": {

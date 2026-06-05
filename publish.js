@@ -1,8 +1,11 @@
 // OVMS plugin packaging: generate the manifest + assemble the gh-pages repo tree.
 // Node-side build tooling (NOT bundled to Duktape). Usage:
 //   node publish.js --out <dir>     # assemble plugins.json + abrp/abrp.js into <dir>
+//   node publish.js --publish       # build gh-pages and push to origin/gh-pages
 var fs = require('fs')
 var path = require('path')
+var os = require('os')
+var childProcess = require('child_process')
 
 function arg(name, def) {
   var i = process.argv.indexOf('--' + name)
@@ -38,22 +41,67 @@ function assemblePages(outDir, bundlePath, version) {
   return { manifestPath: manifestPath, moduleOut: moduleOut }
 }
 
-module.exports = { buildManifest: buildManifest, assemblePages: assemblePages }
+function run(args, cwd) {
+  return childProcess.execFileSync('git', args, { cwd: cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString()
+}
+
+function remoteHasGhPages(repoDir) {
+  try {
+    run(['ls-remote', '--exit-code', 'origin', 'gh-pages'], repoDir)
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+// Publishes the contents of stageDir to origin/gh-pages of repoDir, using a
+// temporary git worktree so the main working tree is never disturbed. Creates
+// the gh-pages branch (orphan) on first run; replaces its contents on later runs.
+function publishToGhPages(repoDir, stageDir, message) {
+  var base = fs.mkdtempSync(path.join(os.tmpdir(), 'ghpages-'))
+  var wt = path.join(base, 'wt')
+  try {
+    if (remoteHasGhPages(repoDir)) {
+      run(['fetch', 'origin', 'gh-pages'], repoDir)
+      run(['worktree', 'add', '-B', 'gh-pages', wt, 'origin/gh-pages'], repoDir)
+    } else {
+      run(['worktree', 'add', '--detach', wt], repoDir)
+      run(['checkout', '--orphan', 'gh-pages'], wt)
+    }
+    // Start from a clean tree, then lay down the staged files.
+    try { run(['rm', '-rf', '.'], wt) } catch (e) { /* empty orphan: nothing to remove */ }
+    fs.cpSync(stageDir, wt, { recursive: true })
+    run(['add', '-A'], wt)
+    run(['commit', '-m', message], wt)
+    run(['push', 'origin', 'gh-pages'], wt)
+  } finally {
+    try { run(['worktree', 'remove', '--force', wt], repoDir) } catch (e) { /* best effort */ }
+    try { fs.rmSync(base, { recursive: true, force: true }) } catch (e) { /* best effort */ }
+  }
+}
+
+module.exports = { buildManifest: buildManifest, assemblePages: assemblePages, publishToGhPages: publishToGhPages }
 
 // --- CLI ---
 if (require.main === module) {
   var C = require('./lib/abrp/constants')
   var out = arg('out', null)
-  if (out) {
-    var bundle = path.resolve(__dirname, 'dist/abrp.js')
-    if (!fs.existsSync(bundle)) {
-      console.error('publish.js: ' + bundle + ' not found — run `npm run build` first')
-      process.exit(1)
-    }
+  var doPublish = process.argv.indexOf('--publish') !== -1
+  var bundle = path.resolve(__dirname, 'dist/abrp.js')
+  if ((doPublish || out) && !fs.existsSync(bundle)) {
+    console.error('publish.js: ' + bundle + ' not found — run `npm run build` first')
+    process.exit(1)
+  }
+  if (doPublish) {
+    var stage = fs.mkdtempSync(path.join(os.tmpdir(), 'abrp-pages-'))
+    assemblePages(stage, bundle, C.VERSION)
+    publishToGhPages(process.cwd(), stage, 'release: abrp ' + C.VERSION + ' plugin repo')
+    console.log('publish.js: published abrp ' + C.VERSION + ' to origin/gh-pages')
+  } else if (out) {
     var res = assemblePages(out, bundle, C.VERSION)
     console.log('publish.js: wrote ' + res.manifestPath + ' and ' + res.moduleOut + ' (version ' + C.VERSION + ')')
   } else {
-    console.error('publish.js: nothing to do (expected --out <dir>)')
+    console.error('publish.js: expected --out <dir> or --publish')
     process.exit(1)
   }
 }
