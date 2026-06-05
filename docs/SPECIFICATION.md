@@ -495,13 +495,15 @@ The per-user `user_token` and the per-sample interval both come from OVMS config
    install) — and the OVMS firmware's `plugin/abrp/README.rst` already redirects
    users to this project. So this would be a **clean addition to an empty slot**,
    not a takeover.
-5. **Cold-boot session detection misses charging — TODO.** `manageVehicleStateEvents`
-   synthesizes `callbackVehicleOn()` at startup only when `OvmsMetrics.Value('v.e.on')`
-   is truthy (§4.4, `events.js`), to cover a reboot while already driving. It does
-   **not** check the charging level, so a reboot **while parked-and-charging** stays
-   idle until the next `vehicle.charge.start` edge. Fix: also check `v.c.charging`
-   (the metric `is_charging` reads). Verify on-device whether `OvmsMetrics.Value('v.c.charging')`
-   returns a truthy value or a `"yes"`/`"no"` string before relying on truthiness.
+5. **Cold-boot session detection — RESOLVED in 3.0.0-alpha.1.** `manageVehicleStateEvents`
+   now synthesizes `callbackVehicleOn()` at startup when **either** `OvmsMetrics.Value('v.e.on')`
+   **or** `OvmsMetrics.Value('v.c.charging')` is truthy (§4.4, `events.js`), so a reboot
+   **while parked-and-charging** starts a session immediately rather than waiting for the
+   next `vehicle.charge.start` edge. The charging check mirrors the proven truthy `v.e.on`
+   pattern (`v.c.charging` is the same boolean metric `is_charging` reads). **On-vehicle
+   validation should confirm** `OvmsMetrics.Value('v.c.charging')` is falsy when not charging
+   (i.e. not a truthy `"no"` string) — the existing `v.e.on` truthy check working in the
+   field indicates booleans, but this path is new.
 6. **Configurable send (bulk-flush) interval — TODO (3.0 feature).** The flush cadence
    is hardwired to `ticker.10` (every 10 s). Make it user-selectable across 10–60 s in
    10 s steps via a config key (e.g. `usr abrp.send_interval`, default 10 so existing

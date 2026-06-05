@@ -10,6 +10,9 @@
   the rest carry `utc` + changed fields only.
 - Vehicle-off bookend forces a coherent parked state (`speed`/`power`=0,
   `is_parked`=true, `is_charging`/`is_dcfc`=false).
+- Cold-boot session detection now also checks `v.c.charging`, so a module reboot
+  while parked-and-charging starts a session immediately (previously waited for the
+  next `vehicle.charge.start` edge).
 
 ## Version 2.3.0, 2026-06-02, `kezarjg`
 
