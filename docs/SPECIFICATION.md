@@ -140,6 +140,7 @@ never `PubSub` directly).
 | `vehicle.on`, `vehicle.charge.start` | `callbackVehicleOn` | Session start |
 | `vehicle.off`, `vehicle.charge.stop` | `callbackVehicleOff` | Session end |
 | `vehicle.type.set` | `overrideMetricMap` | Vehicle type becomes known/changes |
+| `config.changed` | `applyIntervals` | Any config change — re-reads `sample_interval`/`send_interval` |
 
 ### 4.5 Startup sequence
 
@@ -440,6 +441,10 @@ conversion). A field is sent only when its OVMS source(s) are present.
 The per-user `user_token` and the two cadence config keys all come from OVMS config,
 not constants: `usr abrp.user_token`, `usr abrp.sample_interval` (sampling cadence,
 1–5 s), `usr abrp.send_interval` (flush cadence, 10–60 s).
+
+Changes to `usr abrp.sample_interval` / `usr abrp.send_interval` apply **live** —
+`events.js` re-reads them on `config.changed`, so they take effect on the next tick
+(no session restart or JS-engine reload).
 
 ---
 

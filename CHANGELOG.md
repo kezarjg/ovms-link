@@ -17,6 +17,9 @@
   30** — up from the prior effective 10 s), gated on `m.monotonic`. Each flush now
   sends the whole queue (bounded by `MAX_TELEMETRY_QUEUE_SIZE`); `MAX_BULK_BATCH_SIZE`
   is removed.
+- `usr abrp.sample_interval` and `usr abrp.send_interval` changes now apply live on
+  the OVMS `config.changed` event (next sample/flush tick), instead of only at the
+  next session.
 
 ## Version 2.3.0, 2026-06-02, `kezarjg`
 
