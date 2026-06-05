@@ -1,4 +1,5 @@
 /node_modules
+/dist
 
 # Generated documentation (source of truth is docs/SPECIFICATION.md)
 /docs/SPECIFICATION.html

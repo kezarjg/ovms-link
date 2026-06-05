@@ -5,6 +5,7 @@
   "main": "abrp.js",
   "private": true,
   "scripts": {
+    "build": "node build.js --src lib/abrp --entry abrp --out dist/abrp.js",
     "test": "jest"
   },
   "devDependencies": {
