@@ -16,9 +16,11 @@ Two coupled changes to the bulk-flush path (`telemetry.js`):
   is removed. A backlog (after an outage) drains in one flush rather than 10 points
   per `ticker.10`.
 - **Configurable flush interval.** The flush cadence becomes user-selectable 10–60 s
-  via `usr abrp.send_interval` (default 10), gated on `m.monotonic` elapsed time —
+  via `usr abrp.send_interval` (**default 30**), gated on `m.monotonic` elapsed time —
   the same pattern as the sampler. Sending the whole queue is what makes a longer
-  interval safe (no per-flush 10-point cap to back up behind).
+  interval safe (no per-flush 10-point cap to back up behind). The default moves from
+  today's effective 10 s to 30 s — a deliberate, bandwidth-friendlier default that
+  whole-queue makes safe.
 
 Delta encoding (already implemented) keeps even a full-queue POST compact.
 
@@ -28,7 +30,8 @@ Delta encoding (already implemented) keeps even a full-queue POST compact.
 - Let users trade latency for fewer network wakeups (10–60 s flush).
 - Drain a backlog in a single flush; remove the drain-lag coupling the change-based
   redesign left open.
-- Keep default behavior identical to today (flush every 10 s).
+- Default to a bandwidth-friendlier 30 s flush (safe now that whole-queue removes the
+  backlog risk); users wanting the old 10 s cadence set `usr abrp.send_interval` to 10.
 
 **Non-goals**
 - No change to the **sample** cadence (`usr abrp.sample_interval`) — that's a separate
@@ -86,7 +89,7 @@ the next session (acceptable; matches `sample_interval`).
 
 ### 3.4 Constants (`constants.js`)
 
-- Add `SEND_INTERVAL_DEFAULT: 10`.
+- Add `SEND_INTERVAL_DEFAULT: 30`.
 - Remove `MAX_BULK_BATCH_SIZE` (no longer referenced).
 
 ## 4. Edge cases & risks
@@ -114,8 +117,8 @@ need it.
 
 ### New tests (`node:test`)
 
-- `config.sendInterval()`: default 10 when unset; `'30'`→30; `'5'`→10 (clamp low);
-  `'90'`→60 (clamp high); `'x'`→10.
+- `config.sendInterval()`: default 30 when unset; `'20'`→20; `'5'`→10 (clamp low);
+  `'90'`→60 (clamp high); `'x'`→30.
 - `sendBulkTelemetry` flush gate (bundle, stubbed mutable `m.monotonic` + `HTTP`):
   - with `setSendInterval(30)`: a tick at `mono=10` (interval not elapsed, queue
     non-empty) does **not** POST; advancing to `mono=40` **does** POST.
@@ -142,7 +145,8 @@ follow from whole-queue send).
 ## 6. Versioning & docs
 
 Folds into the unreleased `3.0.0-alpha.1`: add a CHANGELOG bullet (configurable
-`usr abrp.send_interval`; whole-queue flush; `MAX_BULK_BATCH_SIZE` removed). Update
+`usr abrp.send_interval`, **default 30 s** — up from the prior effective 10 s;
+whole-queue flush; `MAX_BULK_BATCH_SIZE` removed). Update
 `SPECIFICATION.md` §5 (flush cadence + whole-queue), the §8 constants table
 (−`MAX_BULK_BATCH_SIZE`, +`SEND_INTERVAL_DEFAULT`), and mark §11 #6 **resolved**. Note
 both config knobs (`sample_interval`, `send_interval`) in the config docs.
