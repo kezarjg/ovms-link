@@ -29,6 +29,10 @@
     {
       "files": ["*.test.js", "jest.setup.js"],
       "parserOptions": { "ecmaVersion": 2021 }
+    },
+    {
+      "files": ["build.js"],
+      "env": { "node": true }
     }
   ]
 }
