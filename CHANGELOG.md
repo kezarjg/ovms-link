@@ -7,6 +7,7 @@
 - Added token-tracking subscribe/unsubscribe wrappers for clean event teardown.
 - Wired `capacity` (from `v.b.capacity`) and derived `soe` (`SoC × capacity`).
 - `hvac_power` is now supported only where a vehicle-specific override provides it.
+- Wired `hvac_power` for the Toyota e-TNGA (`SUBSOL`/`TOYBZ4X`) from `xte.v.e.hvac.power`.
 - Fixed telemetry loss on concurrent bulk flush (batch is snapshotted before send).
 - Fixed silent data loss: the queue is cleared only when the API confirms success
   (HTTP 200 *and* JSON body `status: "ok"`), not on HTTP 200 alone.
