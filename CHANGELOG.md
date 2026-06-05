@@ -1,18 +1,24 @@
 # CHANGELOG
 
-## Version 2.3.0, 2026-06-01, `kezarjg`
+## Version 2.3.0, 2026-06-02, `kezarjg`
 
 - Switched telemetry transmission to bulk uploads (`/1/tlm/bulk`) with a queue.
 - Added GPS-time gating so telemetry is only sent once a valid UTC time is known.
 - Added token-tracking subscribe/unsubscribe wrappers for clean event teardown.
 - Wired `capacity` (from `v.b.capacity`) and derived `soe` (`SoC × capacity`).
 - `hvac_power` is now supported only where a vehicle-specific override provides it.
+- Wired `hvac_power` for the Toyota e-TNGA (`SUBSOL`/`TOYBZ4X`) from `xte.v.e.hvac.power`.
+- Fixed tyre-pressure sources: read the `v.t.pressure` vector (FL=0, FR=1, RL=2, RR=3) instead of the non-existent `v.tp.*.p` metrics.
 - Fixed telemetry loss on concurrent bulk flush (batch is snapshotted before send).
 - Fixed silent data loss: the queue is cleared only when the API confirms success
   (HTTP 200 *and* JSON body `status: "ok"`), not on HTTP 200 alone.
 - Restored median power/speed smoothing while driving on the default (non-bandwidth-saver) path; charging continues to send instantaneous power.
 - Fixed a latent Nissan Leaf range-override bug (implicit globals under strict mode).
-- Made `lib/abrp.js` require()-able under Jest and expanded the unit test suite.
+- Fixed a further telemetry-loss edge case: when the queue is full during an
+  in-flight bulk flush, the sent batch is removed **by identity**, so a concurrent
+  overflow drop cannot discard never-sent points.
+- Made `lib/abrp.js` require()-able under Jest and expanded the unit test suite
+  (`lib/abrp.test.js`).
 
 ## Version 2.2.0, 2025-05-21, `kezarjg`
 

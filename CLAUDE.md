@@ -79,10 +79,10 @@ Bump `VERSION` and update `CHANGELOG.md` for user-facing changes.
 ## Commands
 
 ```bash
-npm test                        # jest (lib/arbp.test.js)
+npm test                        # jest (lib/abrp.test.js)
 npx jest -t "isSignificant"     # run a single test/describe by name
 npx eslint lib/ jest.setup.js   # lint (config in .eslintrc.json; test files use an override)
-npx prettier --write lib/arbp.test.js jest.setup.js  # format Node-side files only — NOT abrp.js
+npx prettier --write lib/abrp.test.js jest.setup.js  # format Node-side files only — NOT abrp.js
 ```
 
 Node version is pinned to 18 (`.nvmrc`). There is no CI configured.
@@ -94,7 +94,7 @@ module-load side effects (the `OvmsConfig` token read and the `overrideMetricMap
 / `subscribe('ticker.1', …)` auto-start) are guarded behind
 `typeof OvmsConfig !== 'undefined'` checks — off-device, `require()` is
 side-effect-free. Tests use the `loadAbrp(globals)` helper (top of
-`lib/arbp.test.js`): it calls `jest.resetModules()`, clears the OVMS host globals,
+`lib/abrp.test.js`): it calls `jest.resetModules()`, clears the OVMS host globals,
 optionally injects per-test stubs (`OvmsMetrics`, `HTTP`, …), and re-requires the
 module. `jest.setup.js` provides no-op `print`/`performance` globals.
 

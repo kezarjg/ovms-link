@@ -28,17 +28,21 @@ point at which the manual hand-copy era is deprecated.
 
 | Version | Theme | Delivery | Gating |
 | --- | --- | --- | --- |
-| `2.3.0` | Pipeline + data integrity | Hand-installed single file | On-vehicle test |
-| `2.3.1` | Quality patch (optional) | Hand-installed single file | — |
-| `2.4.0` | Bandwidth + plan awareness | Hand-installed single file | none (#41 resolved) |
-| `3.0.0` | Plugin platform | OVMS plugin (+ web UI) | OAuth2 redirect; cert bootstrap |
+| `2.3.0` | Pipeline + data integrity (incl. overflow fix + test rename) | Hand-installed single file | On-vehicle test |
+| `3.0.0` | Plugin platform (+ bandwidth delta encoding, plan awareness) | OVMS plugin (+ web UI) | OAuth2 redirect; cert bootstrap |
+
+> The previously-planned `2.4.0` has been **dissolved** — its features moved into
+> 3.0.0 (see below). 2.3.0 ships as the validated core with nothing bolted on
+> before its first on-vehicle test.
 
 ---
 
 ## 2.3.0 — Pipeline + data integrity (in testing)
 
-**Status:** code-complete and verified on `refactor/abrp-2.3.0` (25 unit tests
-pass, ESLint clean, `VERSION = '2.3.0'`, `package.json` 2.3.0).
+**Status:** code-complete and verified on `refactor/abrp-2.3.0` (26 unit tests
+pass, ESLint clean, `VERSION = '2.3.0'`, `package.json` 2.3.0). Includes the former
+2.3.1 quality fixes (queue-overflow-during-in-flight removal **by identity**, and
+the `arbp.test.js` → `abrp.test.js` rename), folded in since 2.3.0 had not shipped.
 
 Completes the half-finished bulk-telemetry refactor and ships it on a current
 upstream base: bulk-upload queue, the concurrent-flush and HTTP-200-vs-`status:"ok"`
@@ -57,42 +61,23 @@ test suite, CA certs + README from upstream, and a lint-clean source. Detailed i
    fast-forward).
 
 The upstream PR to `iternio/ovms-link` is a separate, later step (gated on
-validation and the `arbp.test.js` rename — see 2.3.1).
+validation).
 
-## 2.3.1 — Quality patch (optional)
+## 2.4.0 — dissolved (features moved to 3.0.0)
 
-**Status:** proposed. Could also be folded into 2.4.0.
+The intended 2.4.0 features were redistributed rather than shipped as a separate
+release:
 
-- Fix the **queue-overflow-during-in-flight** edge case (`SPECIFICATION.md` §11.1):
-  remove the in-flight batch by identity, or block the overflow `shift()` while
-  `isSending`.
-- Rename the misspelled `lib/arbp.test.js` → `lib/abrp.test.js` before any upstream
-  PR.
-
-No behavior change for users; quality only.
-
-## 2.4.0 — Bandwidth + plan awareness
-
-**Status:** proposed. Still single-file / hand-installed — additive, low-risk.
-
-- **Per-point delta encoding** in bulk batches (`SPECIFICATION.md` §5.6): omit
-  fields unchanged since the previous point in a batch, keeping `utc` + changed
-  values. **Confirmed feasible by Iternio
-  ([#41](https://github.com/iternio/ovms-link/issues/41), 2026-06-02):** ABRP's
-  telemetry pipeline has a "persistence grouper" that carries forward last-known
-  values for omitted keys, and **`utc` is the only required field per point**. So
-  each non-first point in a batch sends `utc` + only changed fields. No longer
-  gated.
-- **Plan-awareness notifications** using free telemetry-API reads that **reuse the
-  existing user token** (no new auth):
-  - `get_next_charge` → notify the driver of ABRP's target SoC for the next stop.
-  - `get_latest_plan` → notify next-stop / ETA / arrival-SoC summaries.
-  - Poll sparingly (e.g. `get_next_charge` only while charging, every few minutes)
-    to respect the bandwidth goals; both only return data when the user has an
-    active plan in ABRP.
-
-Rationale: delivers real value (data savings + plan visibility) without touching
-the install model, so it can ship while the platform work below is designed.
+- **Per-point delta encoding** → 3.0.0 (bandwidth item in the telemetry path).
+  Iternio confirmed it is feasible
+  ([#41](https://github.com/iternio/ovms-link/issues/41), 2026-06-02): ABRP's
+  pipeline carries forward last-known values for omitted keys, and `utc` is the
+  only required field per point. **Design note:** it needs care around the
+  overflow-drop/retry baseline — a within-batch "full first point" (or an
+  across-batch resync-on-drop guard) — so it is not a trivial bolt-on; designed
+  properly within 3.0 rather than rushed onto the pre-test 2.3.0 core.
+- **Plan-awareness notifications** → 3.0.0 (already covered by the plan/charge
+  sub-project: `get_next_charge` / `get_latest_plan`).
 
 ## 3.0.0 — Plugin platform (the leap)
 
@@ -125,6 +110,12 @@ The release where installation, onboarding, and product scope change together:
   CAs to `/store/trustedca`, so 3.0 must either keep certs a documented manual
   prerequisite or have the plugin write them and run `tls trust reload` at first
   run. **Resolve before claiming a true one-command install.**
+- **Bandwidth: per-point delta encoding** (from the dissolved 2.4.0) — within a
+  bulk batch, points after the first carry `utc` + only changed fields
+  (Iternio-confirmed, #41). Must handle the overflow-drop/retry baseline safely
+  (full first point per batch, or an across-batch resync-on-drop guard).
+- **Plan-awareness notifications** (from the dissolved 2.4.0) — `get_next_charge` /
+  `get_latest_plan` driver notifications; part of the plan/charge sub-project.
 
 ### Decomposition (3.0 is multiple spec/plan cycles)
 
@@ -180,7 +171,7 @@ independently testable modules (organised under `lib/abrp/` in the repo) — e.g
 
 | Item | Blocked on |
 | --- | --- |
-| 2.4.0 delta encoding | ~~Iternio answer to #41~~ — **resolved 2026-06-02** (carry-forward confirmed; `utc`-only) |
+| 2.4.0 delta encoding | Iternio answer to issue #41 |
 | 3.0 OAuth2 onboarding | Embedded-friendly redirect strategy |
 | 3.0 one-command install | CA-cert bootstrap approach |
 | 3.0 openvehicles distribution | Coordination to (re-)publish `abrp` to the default repo |
