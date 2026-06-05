@@ -50,10 +50,14 @@ out.push('  module.exports = __require(' + JSON.stringify(entry) + ');')
 out.push('})();')
 var bundle = out.join('\n') + '\n'
 
-// Duktape-safety guard on the emitted file (ignore comment lines).
-var offenders = bundle.split('\n').filter(function (line) {
-  var code = line.replace(/\/\/.*$/, '')
-  return /=>/.test(code) || /`/.test(code)
+// Duktape-safety guard on the emitted file. Strip comments first so backticks
+// and "=>" inside JSDoc/block or line comments don't trip the check — we only
+// care about real template literals / arrow functions in code.
+var codeOnly = bundle
+  .replace(/\/\*[\s\S]*?\*\//g, '') // block comments (incl. JSDoc)
+  .replace(/\/\/.*$/gm, '') // line comments
+var offenders = codeOnly.split('\n').filter(function (line) {
+  return /=>/.test(line) || /`/.test(line)
 })
 if (offenders.length) {
   console.error('build.js: Duktape-unsafe syntax in bundle:\n' + offenders.join('\n'))
