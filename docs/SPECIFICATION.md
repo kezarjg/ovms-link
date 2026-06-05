@@ -182,9 +182,12 @@ sample. The interval comes from `usr abrp.sample_interval` (validated 1–5, def
 
 **Send (flush) interval gate.** `ticker.10` fires every 10 s, but
 `sendBulkTelemetry()` skips unless `m.monotonic` has advanced by `sendInterval`
-seconds since the last successful flush. The interval comes from
-`usr abrp.send_interval` (validated 10–60 s, default `SEND_INTERVAL_DEFAULT = 30`)
-via `Cfg.sendInterval()`. Effective granularity is 10 s since the flush only lands
+seconds since the last flush **attempt** (`lastFlushMono` is stamped when a flush
+starts, not when it succeeds — so a failed POST keeps its batch queued and retries
+on the next gate opening, ~`sendInterval` s later, rather than the next 10 s tick).
+The interval comes from `usr abrp.send_interval` (validated 10–60 s, default
+`SEND_INTERVAL_DEFAULT = 30`) via `Cfg.sendInterval()`. Effective granularity is 10 s
+since the flush only lands
 on `ticker.10` boundaries. Each flush sends the **whole queue** as a single batch
 (bounded by `MAX_TELEMETRY_QUEUE_SIZE = 100`); there is no per-POST cap.
 
