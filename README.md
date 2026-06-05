@@ -23,29 +23,40 @@ based on live information.
 3. In the settings for the new vehicle, click on the **Live data** button to
    generate a generic token. Keep a record of this token
 
-### Build the plugin bundle
+### Install via the OVMS plugin store (recommended)
 
-The plugin source is split into modules under `lib/abrp/`. Build the single-file
-deliverable first — this requires [Node.js](https://nodejs.org) (the bundler is
-dependency-free, so **no `npm install` is needed**):
+1. In the OVMS web console, go to **Tools** -> **Shell**.
+2. Register this plugin repository and install:
+
+   ```text
+   plugin repo install abrp https://kezarjg.github.io/ovms-link/
+   plugin install abrp
+   ```
+
+3. Reload the JS engine (**Tools** -> **Editor** -> **Reload JS Engine**); expect an
+   `ABRP::started` notification. Later, `plugin update` upgrades to new versions.
+
+(No `ovmsmain.js` step — the plugin's module element auto-loads at each JS-engine start.)
+
+### Install manually (fallback)
+
+If you can't use the plugin store, build and hand-copy the single-file bundle. This
+requires [Node.js](https://nodejs.org) (the bundler is dependency-free, so **no
+`npm install` is needed**):
 
 ```bash
 npm run build      # emits dist/abrp.js
 ```
 
-`dist/abrp.js` is the self-contained, Duktape-safe file you install below.
+1. In the OVMS web console, **Tools** -> **Editor**; use `/store/scripts/lib/abrp.js`
+   for **Path**, **Load**, paste the content of the built `dist/abrp.js`, **Save**.
+2. Use `/store/scripts/ovmsmain.js` for **Path**, **Load**, paste the content of the
+   repository's `ovmsmain.js`, **Save**.
 
-### Install the abrp.js Plugin in OVMS
-
-1. Login to the
-   [OVMS web console](https://docs.openvehicles.com/en/latest/userguide/installation.html#initial-connection-wifi-and-browser)
-2. Navigate to the **Tools** -> **Editor** menu item
-3. Use `/store/scripts/lib/abrp.js` for **Path** and press **Load**
-4. Copy the content of the built `dist/abrp.js` file to that file and **Save**
-   (the on-device path stays `lib/abrp.js` — that is what `ovmsmain.js` loads)
-5. Use `/store/scripts/ovmsmain.js` for **Path** and press **Load**
-6. Copy the content of the `ovmsmain.js` file in this repository to that
-   file and **Save**
+**Required for both install methods:** the plugin's TLS connection to
+`api.iternio.com` needs the CA certificates below installed (the plugin *install*
+itself is already trusted via GitHub Pages). Automatic cert install is planned for a
+later release.
 
 ### Install or update the trusted root CA in OVMS
 
