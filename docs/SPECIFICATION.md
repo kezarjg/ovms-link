@@ -400,7 +400,7 @@ conversion). A field is sent only when its OVMS source(s) are present.
 
 ---
 
-## 8. Configuration constants (tunables, top of `lib/abrp.js`)
+## 8. Configuration constants (tunables, `lib/abrp/constants.js`)
 
 | Constant | Value | Meaning |
 | --- | --- | --- |
@@ -518,7 +518,7 @@ The per-user `user_token` and the per-sample interval both come from OVMS config
      Nth-tick math against a 10-point cap, set each flush's batch to the live
      `telemetryToSend` (already bounded by `MAX_TELEMETRY_QUEUE_SIZE = 100`), i.e. raise
      the effective cap to the queue size instead of slicing 10. The spec already lists
-     "Larger `MAX_BULK_BATCH_SIZE`" as a candidate (§5.3). This **dissolves the drain-lag
+     "Larger `MAX_BULK_BATCH_SIZE`" as a candidate (§5.6). This **dissolves the drain-lag
      coupling** and simplifies the flush. Keep `MAX_TELEMETRY_QUEUE_SIZE` as a sanity
      ceiling — prefer raising the cap over deleting the constant, so one POST can never
      exceed the queue. **Tradeoffs/unknowns:** a worst-case ~100-point POST must still
