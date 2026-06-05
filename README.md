@@ -33,10 +33,10 @@ based on live information.
    plugin install abrp
    ```
 
-3. Reload the JS engine (**Tools** -> **Editor** -> **Reload JS Engine**); expect an
-   `ABRP::started` notification. Later, `plugin update` upgrades to new versions.
+   Later, `plugin update` upgrades to new versions.
 
-(No `ovmsmain.js` step — the plugin's module element auto-loads at each JS-engine start.)
+*No `ovmsmain.js` step is needed — the plugin's module element auto-loads at each
+JS-engine start.*
 
 ### Install manually (fallback)
 
@@ -53,14 +53,15 @@ npm run build      # emits dist/abrp.js
 2. Use `/store/scripts/ovmsmain.js` for **Path**, **Load**, paste the content of the
    repository's `ovmsmain.js`, **Save**.
 
-**Required for both install methods:** the plugin's TLS connection to
-`api.iternio.com` needs the CA certificates below installed (the plugin *install*
-itself is already trusted via GitHub Pages). Automatic cert install is planned for a
-later release.
+**Required for both install methods:** the plugin's runtime TLS connection to
+`api.iternio.com` needs the CA certificates below. (The plugin files are served over
+GitHub Pages, whose certificate OVMS already trusts, so the *install* itself needs no
+cert setup — only the runtime connection to `api.iternio.com` needs these extra
+roots.) Automatic cert install is planned for a later release.
 
 ### Install or update the trusted root CA in OVMS
 
-OVMS includes a limited amount of trusted CA. We need to import additionnal ones for abrp.js to work.
+OVMS includes a limited amount of trusted CA. We need to import additional ones for the plugin to work.
 
 1. Login to the
    [OVMS web console](https://docs.openvehicles.com/en/latest/userguide/installation.html#initial-connection-wifi-and-browser)
