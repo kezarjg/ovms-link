@@ -167,7 +167,8 @@ ticker.1  ──► sample
                  ▲
 ticker.10 ──► sendBulkTelemetry
                  │  if isSending or empty: return
-                 │  batch = telemetryToSend.slice(0, 10)   ── snapshot
+                 │  if mono - lastFlushMono < sendInterval: return   ── interval gate
+                 │  batch = telemetryToSend.slice(0)   ── whole-queue snapshot
                  │  POST /1/tlm/bulk   (delta-encoded — §5.4)
                  │  on (HTTP 200 AND status:"ok"): removeTelemetryBatch(batch)   ── by identity
                  │  else: keep batch for retry next tick
@@ -178,6 +179,14 @@ work once `m.monotonic` has advanced by `sampleInterval` seconds since the last
 sample. The interval comes from `usr abrp.sample_interval` (validated 1–5, default
 `SAMPLE_INTERVAL_DEFAULT = 3`) via `Cfg.sampleInterval()`, applied through
 `Q.setSampleInterval()` at session start.
+
+**Send (flush) interval gate.** `ticker.10` fires every 10 s, but
+`sendBulkTelemetry()` skips unless `m.monotonic` has advanced by `sendInterval`
+seconds since the last successful flush. The interval comes from
+`usr abrp.send_interval` (validated 10–60 s, default `SEND_INTERVAL_DEFAULT = 30`)
+via `Cfg.sendInterval()`. Effective granularity is 10 s since the flush only lands
+on `ticker.10` boundaries. Each flush sends the **whole queue** as a single batch
+(bounded by `MAX_TELEMETRY_QUEUE_SIZE = 100`); there is no per-POST cap.
 
 **Per-field rounding.** Each sampled field is rounded to the precision in the
 `ROUNDING` map (`constants.js`) — e.g. `soc` to integer, `power` to 1 dp,
@@ -206,16 +215,18 @@ trigger a send, with no field singled out.
 
 ### 5.2 Send cadence (sample interval + heartbeat)
 
-Cadence is set by two knobs rather than a state-adaptive ladder:
+Cadence is set by three knobs rather than a state-adaptive ladder:
 
 | Knob | Value | Effect |
 | --- | --- | --- |
-| `sampleInterval` | `usr abrp.sample_interval` (1–5, default `SAMPLE_INTERVAL_DEFAULT = 3`) | Minimum seconds between samples; `sample()` is gated on `m.monotonic` elapsed time |
+| `sampleInterval` | `usr abrp.sample_interval` (1–5 s, default `SAMPLE_INTERVAL_DEFAULT = 3`) | Minimum seconds between samples; `sample()` is gated on `m.monotonic` elapsed time |
+| `sendInterval` | `usr abrp.send_interval` (10–60 s, default `SEND_INTERVAL_DEFAULT = 30`) | Minimum seconds between bulk flushes; `sendBulkTelemetry()` is gated on `m.monotonic` elapsed time (effective granularity 10 s on `ticker.10`) |
 | `HEARTBEAT_INTERVAL` | `160 s` (default; `0` disables) | If no point has been queued for this long, force one to keep the ABRP session alive |
 
-So in steady state the plugin queues at most one point per `sampleInterval` seconds,
-and only when a rounded field changed; if the vehicle sits unchanged, the heartbeat
-emits a keep-alive every `HEARTBEAT_INTERVAL` seconds. The heartbeat interval is kept
+So in steady state the plugin queues at most one point per `sampleInterval` seconds
+(only when a rounded field changed), and flushes the whole queue at most every
+`sendInterval` seconds. If the vehicle sits unchanged, the heartbeat emits a
+keep-alive every `HEARTBEAT_INTERVAL` seconds. The heartbeat interval is kept
 below the OVMS API-key staleness window (~3 min) so the session stays alive. See the
 design spec
 `docs/superpowers/specs/2026-06-05-telemetry-change-based-redesign-design.md`.
@@ -235,13 +246,17 @@ design spec
 
 - `telemetryToSend` is a FIFO array, capacity `MAX_TELEMETRY_QUEUE_SIZE = 100`.
   On overflow the **oldest** entry is dropped (`shift`) with a warning.
-- `sendBulkTelemetry` sends **at most one batch** per call:
+- `sendBulkTelemetry` fires on `ticker.10` (0.1 Hz) but is also **interval-gated**
+  on `m.monotonic`: if fewer than `sendInterval` seconds have elapsed since the last
+  flush, it returns immediately (effective granularity 10 s). Sends **at most one
+  batch** per call:
   - **In-flight guard** (`isSending`): no overlapping requests; cleared in `done`,
     `fail`, and a `try/catch` around `HTTP.Request` (so a synchronous throw cannot
     wedge the flag).
-  - **Batch snapshot:** `batch = telemetryToSend.slice(0, MAX_BULK_BATCH_SIZE)`
-    (≤10). The removal count is fixed at send time, so telemetry appended during
-    the in-flight request is not lost.
+  - **Whole-queue snapshot:** `batch = telemetryToSend.slice(0)` — the entire
+    queue (up to `MAX_TELEMETRY_QUEUE_SIZE = 100` points) is snapshotted at send
+    time. There is no per-POST point cap. Telemetry appended during the in-flight
+    request is not lost because the snapshot is taken before the request starts.
   - **Delta-encoded POST:** `createBulkPost` delta-encodes the batch
     (`telemetry.js`) — the **first point of each POST is sent in full** (a per-flush
     resync, drop-safe), and every subsequent point carries `utc` plus only the fields
@@ -278,7 +293,7 @@ optimizations.
 | Per-field rounding (§4.6, §5.5) | Each field trimmed to its `ROUNDING` precision before send (and used as the change threshold) | client-side rounding |
 | Per-point delta within a bulk batch (§5.4) | First point of each POST is full; the rest carry `utc` + changed fields only | `min_changed` persistence grouper |
 | Supported-field omission (§4.2) | Only metrics the vehicle actually publishes are sent | "only available values are sent" |
-| Bulk batching (§5.4) | Up to `MAX_BULK_BATCH_SIZE` (10) points per HTTPS request — amortizes TLS/handshake/header overhead vs. one request per point | single **and** bulk endpoints |
+| Bulk batching (§5.4) | The whole queue (up to `MAX_TELEMETRY_QUEUE_SIZE = 100` points) per HTTPS request — amortizes TLS/handshake/header overhead vs. one request per point | single **and** bulk endpoints |
 | Compact JSON | `JSON.stringify` emits no whitespace | `json.dumps(separators=(',',':'))` |
 
 Per-point delta encoding is **confirmed safe by Iternio
@@ -290,9 +305,8 @@ sends the first point of each POST in full as a drop-safe resync (§5.4).
 
 **Candidate optimizations** (Iternio-supported, **not yet implemented**):
 
-- **Larger `MAX_BULK_BATCH_SIZE`.** Raising the 10-point cap further amortizes
-  per-request overhead when a backlog exists, bounded by the 8 s bulk timeout and
-  the 100-point queue cap.
+*(No open items — the whole-queue flush and configurable send interval were
+implemented in 3.0.0-alpha.1; see §11 #6.)*
 
 **Not supported by the API (verified 2026-06-02):**
 
@@ -408,13 +422,14 @@ conversion). A field is sent only when its OVMS source(s) are present.
 | `VERSION` | `'3.0.0-alpha.1'` | Plugin version (bump on user-facing change; update CHANGELOG) |
 | `DEBUG` | `true` | Verbose debug logging |
 | `SAMPLE_INTERVAL_DEFAULT` | `3` s | Default seconds between samples; overridden by `usr abrp.sample_interval` (1–5) |
+| `SEND_INTERVAL_DEFAULT` | `30` s | Default bulk-flush interval seconds; overridden by `usr abrp.send_interval` (10–60) |
 | `HEARTBEAT_INTERVAL` | `160` s | Keep-alive: force a point if none queued for this long (`0` disables; < OVMS API-key staleness) |
 | `ROUNDING` | (map) | Per-field rounding precision (also the change threshold, §5.1) |
 | `MAX_TELEMETRY_QUEUE_SIZE` | `100` | Queue cap; oldest dropped on overflow |
-| `MAX_BULK_BATCH_SIZE` | `10` | Max telemetry points per bulk POST |
 
-The per-user `user_token` and the per-sample interval both come from OVMS config
-(`usr abrp.user_token`, `usr abrp.sample_interval`), not constants.
+The per-user `user_token` and the two cadence config keys all come from OVMS config,
+not constants: `usr abrp.user_token`, `usr abrp.sample_interval` (sampling cadence,
+1–5 s), `usr abrp.send_interval` (flush cadence, 10–60 s).
 
 ---
 
@@ -504,31 +519,16 @@ The per-user `user_token` and the per-sample interval both come from OVMS config
    validation should confirm** `OvmsMetrics.Value('v.c.charging')` is falsy when not charging
    (i.e. not a truthy `"no"` string) — the existing `v.e.on` truthy check working in the
    field indicates booleans, but this path is new.
-6. **Configurable send (bulk-flush) interval — TODO (3.0 feature).** The flush cadence
-   is hardwired to `ticker.10` (every 10 s). Make it user-selectable across 10–60 s in
-   10 s steps via a config key (e.g. `usr abrp.send_interval`, default 10 so existing
-   setups are unchanged). **Constraint:** OVMS only emits `ticker.1/.10/.60/.300/.600/.3600`
-   — there is no `ticker.20/30/40/50` — so implement by keeping the `ticker.10`
-   subscription and flushing only every Nth tick (`N = interval / 10`), not by
-   subscribing to a differently-named ticker. **Coupling to resolve:** at longer
-   intervals the per-flush `MAX_BULK_BATCH_SIZE = 10` cap can be exceeded by what
-   accumulates between flushes (driving queues ≈ 1 point / `METRIC_POLL_RATE_DRIVING`),
-   so the queue would grow and lag — a longer interval likely needs a higher batch cap
-   or a drain-loop. Treat as a proper feature (brainstorm → spec → CHANGELOG), not a
-   one-liner.
-   - **Preferred resolution — send the whole queue per flush.** Rather than tune the
-     Nth-tick math against a 10-point cap, set each flush's batch to the live
-     `telemetryToSend` (already bounded by `MAX_TELEMETRY_QUEUE_SIZE = 100`), i.e. raise
-     the effective cap to the queue size instead of slicing 10. The spec already lists
-     "Larger `MAX_BULK_BATCH_SIZE`" as a candidate (§5.6). This **dissolves the drain-lag
-     coupling** and simplifies the flush. Keep `MAX_TELEMETRY_QUEUE_SIZE` as a sanity
-     ceiling — prefer raising the cap over deleting the constant, so one POST can never
-     exceed the queue. **Tradeoffs/unknowns:** a worst-case ~100-point POST must still
-     finish within the 8 s `ticker.10` timeout on a poor link (failures are retried
-     losslessly, just slower to drain); smaller batches drain a backlog more incrementally
-     on a flaky link; and whether `/1/tlm/bulk` enforces an undocumented per-request point
-     limit is unverified (bounded at 100, likely fine). Per-point delta encoding (#41)
-     shrinks the large-backlog payload further.
+6. **Configurable send (bulk-flush) interval — RESOLVED in 3.0.0-alpha.1.**
+   `sendBulkTelemetry` is now gated on `m.monotonic` elapsed time to a configurable
+   interval: `usr abrp.send_interval` (validated 10–60 s, default
+   `SEND_INTERVAL_DEFAULT = 30` s — up from the prior effective 10 s). Effective
+   granularity is 10 s since the flush only lands on `ticker.10` boundaries. Each
+   flush now sends the **whole queue** (`telemetryToSend.slice(0)`, bounded by
+   `MAX_TELEMETRY_QUEUE_SIZE = 100`), delta-encoded; `MAX_BULK_BATCH_SIZE` is
+   removed. This dissolves the drain-lag coupling that was the main blocker for longer
+   intervals. See
+   `docs/superpowers/specs/2026-06-05-configurable-flush-interval-design.md`.
 
 ---
 

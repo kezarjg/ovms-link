@@ -13,6 +13,10 @@
 - Cold-boot session detection now also checks `v.c.charging`, so a module reboot
   while parked-and-charging starts a session immediately (previously waited for the
   next `vehicle.charge.start` edge).
+- Configurable bulk-flush interval via `usr abrp.send_interval` (10–60 s, **default
+  30** — up from the prior effective 10 s), gated on `m.monotonic`. Each flush now
+  sends the whole queue (bounded by `MAX_TELEMETRY_QUEUE_SIZE`); `MAX_BULK_BATCH_SIZE`
+  is removed.
 
 ## Version 2.3.0, 2026-06-02, `kezarjg`
 

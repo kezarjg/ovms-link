@@ -112,12 +112,13 @@ module-level `var`s.
 
 `DEBUG` (verbose logging), `SAMPLE_INTERVAL_DEFAULT` (default seconds between
 samples; overridden per-user by `usr abrp.sample_interval`, validated 1–5),
-`HEARTBEAT_INTERVAL` (keep-alive seconds, kept under the OVMS API key's ~3-min
-staleness window; `0` disables), `ROUNDING` (per-field precision map, also the
-change threshold), `MAX_TELEMETRY_QUEUE_SIZE`, `MAX_BULK_BATCH_SIZE`. `OVMS_API_KEY`
-is the plugin's Iternio app key; the per-user `user_token` comes from OVMS config
-(`usr abrp.user_token`). Bump `VERSION` and update `CHANGELOG.md` for user-facing
-changes.
+`SEND_INTERVAL_DEFAULT` (default bulk-flush interval in seconds, `30`; overridden
+per-user by `usr abrp.send_interval`, validated 10–60), `HEARTBEAT_INTERVAL`
+(keep-alive seconds, kept under the OVMS API key's ~3-min staleness window; `0`
+disables), `ROUNDING` (per-field precision map, also the change threshold),
+`MAX_TELEMETRY_QUEUE_SIZE`. `OVMS_API_KEY` is the plugin's Iternio app key; the
+per-user `user_token` comes from OVMS config (`usr abrp.user_token`). Bump
+`VERSION` and update `CHANGELOG.md` for user-facing changes.
 
 ## Commands
 
