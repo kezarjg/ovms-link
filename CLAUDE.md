@@ -61,7 +61,7 @@ exposing accessor functions; the thin `abrp` entry wires them together. Build wi
 | `abrp.js` | thin entry: `info`/`onetime`/`send`/`resetConfig` + `module.exports` + `__test` |
 
 `build.js` resolves the relative `require('./x')` graph at build time and emits one
-self-contained, Duktape-safe file. The Jest suite runs against that bundle (see
+self-contained, Duktape-safe file. The test suite runs against that bundle (see
 Testing model), so each module change is regression-checked end-to-end.
 
 Key concepts to understand before editing:
@@ -112,35 +112,43 @@ Bump `VERSION` and update `CHANGELOG.md` for user-facing changes.
 
 ```bash
 npm run build                   # bundle lib/abrp/*.js -> dist/abrp.js (build.js)
-npm test                        # builds the bundle, then runs jest against dist/abrp.js
-npx jest -t "isSignificant"     # run a single test/describe by name (rebuild first: npm run build)
-npx eslint lib/ build.js jest.setup.js   # lint (config in .eslintrc.json; *.test.js + build.js use overrides)
-npx prettier --write lib/abrp.test.js jest.setup.js  # format Node-side files only — NOT lib/abrp/*
+npm test                        # builds the bundle, then runs the node:test suite against dist/abrp.js
+# run one file (rebuild first so the bundle reflects your edits):
+npm run build && node --require ./test/globals.js --test lib/abrp.test.js
+# filter by test name within a run:
+npm run build && node --require ./test/globals.js --test --test-name-pattern="isSignificant" lib/abrp.test.js
+npx eslint lib/ build.js test/   # lint (config in .eslintrc.json; *.test.js + build.js use overrides)
+npx prettier --write lib/abrp.test.js test/globals.js  # format Node-side files only — NOT lib/abrp/*
 ```
 
-`npx jest` alone does **not** rebuild — run `npm run build` first (or use `npm test`)
-so the bundle reflects your source edits. Node version is pinned to 18 (`.nvmrc`).
-There is no CI configured. `/dist` is gitignored (the bundle is a build artifact).
+Tests use Node's built-in runner (`node:test` + `node:assert`) — no test-framework
+dependency. `node --test` alone does **not** rebuild, and it loads `test/globals.js`
+(no-op `print`/`performance` stubs) via `--require`, so always invoke it the way the
+`test` script does (or just run `npm test`). Node is pinned to 22 (`.nvmrc`); `node:test`
+is stable on Node 20+. There is no CI configured. `/dist` is gitignored (build artifact).
 
 ### Testing model (important)
 
-The suite runs green **against the built bundle**: `npm test` first runs `build.js`
-to emit `dist/abrp.js`, then Jest. The bundle is `require()`-able under Jest because
-the entry's auto-start side effects (the `overrideMetricMap()` / `subscribe('ticker.1',
-…)` inside `Ev.startup()`) are guarded behind `typeof OvmsConfig/OvmsMetrics/PubSub
-!== 'undefined'` checks — off-device, `require()` is side-effect-free. The main suite
-(`lib/abrp.test.js`) uses the `loadAbrp(globals)` helper: it calls `jest.resetModules()`,
-clears the OVMS host globals, optionally injects per-test stubs (`OvmsMetrics`, `HTTP`,
-…), and re-requires the bundle (`../dist/abrp`). Per-module tests (`lib/abrp/util.test.js`,
-`lib/abrp/metrics.test.js`) require the source modules directly. `jest.setup.js`
-provides no-op `print`/`performance` globals.
+The suite runs green **against the built bundle** with Node's built-in `node:test`
+runner: `npm test` first runs `build.js` to emit `dist/abrp.js`, then the runner. The
+bundle is `require()`-able off-device because the entry's auto-start side effects (the
+`overrideMetricMap()` / `subscribe('ticker.1', …)` inside `Ev.startup()`) are guarded
+behind `typeof OvmsConfig/OvmsMetrics/PubSub !== 'undefined'` checks — off-device,
+`require()` is side-effect-free. The main suite (`lib/abrp.test.js`) uses the
+`loadAbrp(globals)` helper: it drops the bundle from `require.cache` and re-requires it
+(the bundle is self-contained, so this re-runs its internal module registry → fresh
+queue/metricMap/state — the replacement for `jest.resetModules()`), clears the OVMS host
+globals, and optionally injects per-test stubs (`OvmsMetrics`, `HTTP`, …). Per-module
+tests (`lib/abrp/util.test.js`, `lib/abrp/metrics.test.js`) require the source modules
+directly. `test/globals.js` provides the no-op `print`/`performance` globals (loaded via
+`--require`).
 
 `module.exports` (in the `abrp` entry) exposes the public entry points plus pure
 helpers for testing, and a `__test` seam delegating to the owning modules' accessors
 (`Q.getQueue`, `Q.setCollected`, …) — OVMS ignores the extra export. **Do not**
-reformat `lib/abrp/*.js` with Prettier (hand-styled for Duktape); the ESLint
-`*.test.js` override (`ecmaVersion: 2021`) keeps the source guardrail at ES2015, and a
-`build.js` override enables the Node `env` for the build script.
+reformat `lib/abrp/*.js` with Prettier (hand-styled for Duktape); the ESLint override
+for `*.test.js` + `test/**` (`ecmaVersion: 2021`, Node `env`) keeps the source guardrail
+at ES2015, and a `build.js` override enables the Node `env` for the build script.
 
 **Duktape constraint reminder:** never introduce arrow functions, template literals,
 or object spread into `lib/abrp/*.js` or the emitted bundle (test files may use them

@@ -137,8 +137,8 @@ never `PubSub` directly).
 ### 4.5 Startup sequence
 
 1. Module load: if OVMS globals are present, `overrideMetricMap()` runs and
-   `checkTime` subscribes to `ticker.1`. (Off-device, e.g. under Jest, this block
-   is skipped — see §9.)
+   `checkTime` subscribes to `ticker.1`. (Off-device, e.g. under the `node:test`
+   suite, this block is skipped — see §9.)
 2. `checkTime` fires each second until `m.time.utc` > `946684800` (Jan 1 2000),
    i.e. **GPS/RTC time is valid**. Until then, nothing is sent (telemetry without a
    valid UTC is useless to ABRP).
@@ -398,13 +398,16 @@ conversion). A field is sent only when its OVMS source(s) are present.
 
 ## 9. Testing model
 
-- **Harness:** Jest (Node 18). `lib/abrp.js` is `require()`-able off-device because
-  its module-load side effects (token read; `overrideMetricMap` + `ticker.1`
-  subscribe) are guarded behind `typeof <global> !== 'undefined'`.
-- **`loadAbrp(globals)`** (top of `lib/abrp.test.js`): `jest.resetModules()`,
-  clears OVMS host globals, optionally injects per-test stubs (`OvmsMetrics`,
-  `HTTP`, …), re-requires the module. `jest.setup.js` provides no-op
-  `print`/`performance`.
+- **Harness:** Node's built-in runner (`node:test` + `node:assert`, Node 22) — no
+  test-framework dependency. The suite runs against the built bundle (`dist/abrp.js`,
+  emitted by `build.js`). The bundle is `require()`-able off-device because its
+  module-load side effects (token read; `overrideMetricMap` + `ticker.1` subscribe in
+  `Ev.startup()`) are guarded behind `typeof <global> !== 'undefined'`.
+- **`loadAbrp(globals)`** (top of `lib/abrp.test.js`): drops the bundle from
+  `require.cache` and re-requires it (the bundle is self-contained, so this re-runs its
+  internal module registry → fresh state; replaces `jest.resetModules()`), clears OVMS
+  host globals, optionally injects per-test stubs (`OvmsMetrics`, `HTTP`, …).
+  `test/globals.js` provides no-op `print`/`performance` (loaded via `--require`).
 - **Export seam:** `module.exports` exposes the public entry points, the pure
   decision/helper functions, and a `__test` object (getters/setters over the
   internal queue/state) used by stateful tests. OVMS ignores the extra export.
@@ -412,9 +415,9 @@ conversion). A field is sent only when its OVMS source(s) are present.
   `isSignificantTelemetryChange`), metric resolution (`getOVMSMetric` for
   `capacity`/`soe`), the bulk data-integrity contract (snapshot, in-flight guard,
   `status:"ok"` gate, batch cap, retry), and the collect→queue→reset median cycle.
-- **Lint/format:** `npx eslint lib/ jest.setup.js` (source pinned to ES2015; test
-  files use an `ecmaVersion: 2021` override). Never Prettier-reformat
-  `lib/abrp.js` (hand-styled for Duktape).
+- **Lint/format:** `npx eslint lib/ build.js test/` (source pinned to ES2015; test
+  files + `build.js` use overrides with a Node `env`, and `*.test.js`/`test/**` use
+  `ecmaVersion: 2021`). Never Prettier-reformat `lib/abrp/*.js` (hand-styled for Duktape).
 - **On-vehicle validation** (cannot be unit-tested): install, `tls trust reload`,
   reload JS engine, then `abrp.info()` / `abrp.onetime()` / `abrp.send(1)` and
   confirm the queue drains over `ticker.10` with no loss.
@@ -493,10 +496,10 @@ Requires OVMS firmware `3.3.004` or newer.
 | Path | Purpose |
 | --- | --- |
 | `lib/abrp.js` | The plugin (single deliverable) |
-| `lib/abrp.test.js` | Jest unit suite |
+| `lib/abrp.test.js` | `node:test` unit suite (runs against the bundle) |
 | `ovmsmain.js` | OVMS entry point (`require("lib/abrp")`) |
 | `trustedca/` | CA certificates required for TLS, + install README |
-| `jest.setup.js` | Jest host-global stubs |
+| `test/globals.js` | Test host-global stubs (`print`/`performance`) |
 | `CHANGELOG.md` | Version history |
 | `CLAUDE.md` | Guidance for AI coding assistants |
 | `docs/SPECIFICATION.md` | This document |
