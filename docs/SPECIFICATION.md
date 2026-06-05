@@ -491,6 +491,19 @@ conversion). A field is sent only when its OVMS source(s) are present.
    so the queue would grow and lag — a longer interval likely needs a higher batch cap
    or a drain-loop. Treat as a proper feature (brainstorm → spec → CHANGELOG), not a
    one-liner.
+   - **Preferred resolution — send the whole queue per flush.** Rather than tune the
+     Nth-tick math against a 10-point cap, set each flush's batch to the live
+     `telemetryToSend` (already bounded by `MAX_TELEMETRY_QUEUE_SIZE = 100`), i.e. raise
+     the effective cap to the queue size instead of slicing 10. The spec already lists
+     "Larger `MAX_BULK_BATCH_SIZE`" as a candidate (§5.3). This **dissolves the drain-lag
+     coupling** and simplifies the flush. Keep `MAX_TELEMETRY_QUEUE_SIZE` as a sanity
+     ceiling — prefer raising the cap over deleting the constant, so one POST can never
+     exceed the queue. **Tradeoffs/unknowns:** a worst-case ~100-point POST must still
+     finish within the 8 s `ticker.10` timeout on a poor link (failures are retried
+     losslessly, just slower to drain); smaller batches drain a backlog more incrementally
+     on a flaky link; and whether `/1/tlm/bulk` enforces an undocumented per-request point
+     limit is unverified (bounded at 100, likely fine). Per-point delta encoding (#41)
+     shrinks the large-backlog payload further.
 
 ---
 
