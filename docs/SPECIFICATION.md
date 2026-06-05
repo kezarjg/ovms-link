@@ -290,6 +290,7 @@ optimizations.
 | --- | --- | --- |
 | Change-only queueing (§5.1) | A point is queued only when a rounded field changed since the last; otherwise nothing is sent until the heartbeat | `min_changed = [soc, power, is_charging]` |
 | Sample interval + heartbeat (§5.2) | At most one point per `sampleInterval` (1–5 s) seconds, with a `HEARTBEAT_INTERVAL` keep-alive | driving 1 s / charging 30 s / parked suppressed |
+| Configurable flush interval (§5.2, §5.4) | `usr abrp.send_interval` (10–60 s, default 30) flushes the whole queue every N seconds instead of every 10 s, reducing POST frequency | bulk endpoint |
 | Per-field rounding (§4.6, §5.5) | Each field trimmed to its `ROUNDING` precision before send (and used as the change threshold) | client-side rounding |
 | Per-point delta within a bulk batch (§5.4) | First point of each POST is full; the rest carry `utc` + changed fields only | `min_changed` persistence grouper |
 | Supported-field omission (§4.2) | Only metrics the vehicle actually publishes are sent | "only available values are sent" |
@@ -452,7 +453,7 @@ not constants: `usr abrp.user_token`, `usr abrp.sample_interval` (sampling caden
   the sample-interval gate + heartbeat + change-only queueing, the delta-encoded bulk
   POST (`createBulkPost`), the vehicle-off forced-parked bookend, metric resolution
   (`getOVMSMetric` for `capacity`/`soe`), and the bulk data-integrity contract
-  (snapshot, in-flight guard, `status:"ok"` gate, batch cap, retry).
+  (snapshot, in-flight guard, `status:"ok"` gate, queue cap, retry).
 - **Lint/format:** `npx eslint lib/ build.js test/` (source pinned to ES2015; test
   files + `build.js` use overrides with a Node `env`, and `*.test.js`/`test/**` use
   `ecmaVersion: 2021`). Never Prettier-reformat `lib/abrp/*.js` (hand-styled for Duktape).
