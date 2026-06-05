@@ -45,7 +45,12 @@ if (require.main === module) {
   var C = require('./lib/abrp/constants')
   var out = arg('out', null)
   if (out) {
-    var res = assemblePages(out, 'dist/abrp.js', C.VERSION)
+    var bundle = path.resolve(__dirname, 'dist/abrp.js')
+    if (!fs.existsSync(bundle)) {
+      console.error('publish.js: ' + bundle + ' not found — run `npm run build` first')
+      process.exit(1)
+    }
+    var res = assemblePages(out, bundle, C.VERSION)
     console.log('publish.js: wrote ' + res.manifestPath + ' and ' + res.moduleOut + ' (version ' + C.VERSION + ')')
   } else {
     console.error('publish.js: nothing to do (expected --out <dir>)')
