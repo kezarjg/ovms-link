@@ -501,7 +501,9 @@ Changes to `usr abrp.sample_interval` / `usr abrp.send_interval` apply **live** 
 3. **`hvac_power`** has no generic OVMS source; only sent where a vehicle override
    provides one.
 4. **Deploy via the OVMS plugin infrastructure** (upstream issue
-   [iternio/ovms-link#38](https://github.com/iternio/ovms-link/issues/38)). The
+   [iternio/ovms-link#38](https://github.com/iternio/ovms-link/issues/38)) —
+   **PARTIALLY ADDRESSED in 3.0.0-alpha.1** (see
+   `docs/superpowers/specs/2026-06-05-ws2-plugin-packaging-design.md`). The
    current install is a manual, multi-file copy (§12), which also makes updates
    painful. Packaging the plugin with an OVMS plugin **manifest** (`name`,
    `version`, `prerequisites`, `elements`) served from a repository would enable
@@ -511,20 +513,23 @@ Changes to `usr abrp.sample_interval` / `usr abrp.send_interval` apply **live** 
    `ovmsmain.js`. **A plugin install leaves `ovmsmain.js` untouched** — that file is
    only ever read, never written — so a plugin-delivered build ships **no
    `ovmsmain.js`** and needs no manual wiring (verified in the OVMS source,
-   `ovms_plugins.cpp` / `ovms_duktape.cpp`). **Open question:** the OVMS
-   plugin element types (`module`/`json`/`webpage`/`webhook`/`webrsc`) have **no
-   element for installing trusted root CAs** to `/store/trustedca` + running
-   `tls trust reload`, so the CA certs (§3, §12) cannot be auto-installed by the
-   plugin alone — they would remain a manual prerequisite unless the plugin
-   bootstraps them at first run. Resolve the cert-install path before claiming a
-   true one-command install. Routes: an independent Iternio repo
-   (`plugin repo install`), and/or (re-)publishing `abrp` to the default
-   `openvehicles` repo (`http://api.openvehicles.com/plugins`). Note: as of
-   2026-06 that repo's `plugins.json` no longer lists `abrp` — the legacy `0.1`
-   entry has been **removed** (a `plugin list` may still show it as a stale cached
-   install) — and the OVMS firmware's `plugin/abrp/README.rst` already redirects
-   users to this project. So this would be a **clean addition to an empty slot**,
-   not a takeover.
+   `ovms_plugins.cpp` / `ovms_duktape.cpp`). **Implemented in 3.0.0-alpha.1:**
+   `publish.js` / `npm run release` builds the bundle and publishes a `gh-pages`
+   plugin repo (`plugins.json` + `abrp/abrp.js`), enabling
+   `plugin repo install abrp https://kezarjg.github.io/ovms-link/` then
+   `plugin install abrp` / `plugin update abrp`. **What remains:** (a) the
+   cert-install bootstrap — the OVMS plugin element types
+   (`module`/`json`/`webpage`/`webhook`/`webrsc`) have **no element for installing
+   trusted root CAs** to `/store/trustedca` + running `tls trust reload`, so the CA
+   certs (§3, §12) cannot be auto-installed by the plugin alone — they remain a
+   manual prerequisite unless the plugin bootstraps them at first run; and (b)
+   submission to the default `openvehicles` repo
+   (`http://api.openvehicles.com/plugins`). Note: as of 2026-06 that repo's
+   `plugins.json` no longer lists `abrp` — the legacy `0.1` entry has been
+   **removed** (a `plugin list` may still show it as a stale cached install) — and
+   the OVMS firmware's `plugin/abrp/README.rst` already redirects users to this
+   project, so submission would be a **clean addition to an empty slot**, not a
+   takeover.
 5. **Cold-boot session detection — RESOLVED in 3.0.0-alpha.1.** `manageVehicleStateEvents`
    now synthesizes `callbackVehicleOn()` at startup when **either** `OvmsMetrics.Value('v.e.on')`
    **or** `OvmsMetrics.Value('v.c.charging')` is truthy (§4.4, `events.js`), so a reboot
@@ -548,6 +553,14 @@ Changes to `usr abrp.sample_interval` / `usr abrp.send_interval` apply **live** 
 ---
 
 ## 12. Installation & deployment
+
+The plugin installs two ways: (a) **OVMS plugin store** —
+`plugin repo install abrp https://kezarjg.github.io/ovms-link/` then
+`plugin install abrp` (the bundle installs to `/store/plugins/abrp/abrp.js` and
+auto-loads as `abrp = require("plugin/abrp/abrp")`; no `ovmsmain.js`); or (b) the
+**manual hand-copy** of the built `dist/abrp.js` described below. The plugin repo
+(`plugins.json` + `abrp/abrp.js`) is published to a `gh-pages` branch by `npm run release`
+(`publish.js`).
 
 The deliverable is copied into OVMS via the web console (Tools → Editor):
 

@@ -20,6 +20,10 @@
 - `usr abrp.sample_interval` and `usr abrp.send_interval` changes now apply live on
   the OVMS `config.changed` event (next sample/flush tick), instead of only at the
   next session.
+- Installable as an OVMS plugin: `plugin repo install abrp https://kezarjg.github.io/ovms-link/`
+  then `plugin install abrp`. A `publish.js` / `npm run release` builds the bundle and
+  publishes the plugin repo (`plugins.json` + `abrp/abrp.js`) to a `gh-pages` branch.
+  The manual hand-copy install is retained as a fallback.
 
 ## Version 2.3.0, 2026-06-02, `kezarjg`
 
