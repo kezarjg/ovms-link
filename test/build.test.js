@@ -29,3 +29,11 @@ test('bundles relative requires into a single self-contained module', () => {
   assert.strictEqual(api.greet('world'), 'hello, world')
   fs.unlinkSync(out)
 })
+
+test('defers unknown require ids to the host require', () => {
+  const dir = path.resolve('test/fixtures/extern')
+  const out = path.resolve('test/fixtures/extern.out.js')
+  const api = buildAndLoad(dir, 'entry', out)
+  assert.strictEqual(api.sep, require('path').sep)
+  fs.unlinkSync(out)
+})
