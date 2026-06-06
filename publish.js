@@ -27,6 +27,9 @@ function buildManifest(version) {
       elements: [
         { type: 'module', path: 'abrp.js', name: 'abrp' },
         { type: 'webrsc', path: 'certdata.js', name: 'abrp_certdata' },
+        { type: 'webpage', path: 'config.htm', name: 'abrp_config', label: 'ABRP Config', menu: 'Config', auth: 'admin', page: '/usr/abrp/config' },
+        { type: 'webpage', path: 'dashboard.htm', name: 'abrp_status', label: 'ABRP Status', menu: 'Vehicle', auth: 'none', page: '/usr/abrp/status' },
+        { type: 'webhook', path: 'status-hook.htm', name: 'abrp_status_hook', page: 'status', hook: 'body.post' },
       ],
     },
   ]
@@ -59,10 +62,11 @@ function renderCertData(entries) {
 }
 
 // Writes the Pages tree into outDir: plugins.json (the manifest), abrp/abrp.js
-// (a copy of the bundle at bundlePath), and abrp/certdata.js (the CA roots from
-// certDir). Returns the written paths.
-function assemblePages(outDir, bundlePath, version, certDir) {
+// (the bundle), abrp/certdata.js (CA roots from certDir), and the web assets
+// (abrp/*.htm from webDir, one per .htm manifest element). Returns the paths.
+function assemblePages(outDir, bundlePath, version, certDir, webDir) {
   certDir = certDir || path.resolve(__dirname, 'trustedca')
+  webDir = webDir || path.resolve(__dirname, 'web')
   var pluginDir = path.join(outDir, 'abrp')
   var manifestPath = path.join(outDir, 'plugins.json')
   var moduleOut = path.join(pluginDir, 'abrp.js')
@@ -71,7 +75,15 @@ function assemblePages(outDir, bundlePath, version, certDir) {
   fs.writeFileSync(manifestPath, JSON.stringify(buildManifest(version), null, 2) + '\n')
   fs.copyFileSync(bundlePath, moduleOut)
   fs.writeFileSync(certDataOut, renderCertData(buildCertData(certDir)))
-  return { manifestPath: manifestPath, moduleOut: moduleOut, certDataOut: certDataOut }
+  var webOut = []
+  buildManifest(version)[0].elements.forEach(function (el) {
+    if (/\.htm$/.test(el.path)) {
+      var dest = path.join(pluginDir, el.path)
+      fs.copyFileSync(path.join(webDir, el.path), dest)
+      webOut.push(dest)
+    }
+  })
+  return { manifestPath: manifestPath, moduleOut: moduleOut, certDataOut: certDataOut, webOut: webOut }
 }
 
 function run(args, cwd) {

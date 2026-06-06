@@ -23,6 +23,9 @@ test('buildManifest returns one abrp entry with the given version', () => {
   assert.deepStrictEqual(e.elements, [
     { type: 'module', path: 'abrp.js', name: 'abrp' },
     { type: 'webrsc', path: 'certdata.js', name: 'abrp_certdata' },
+    { type: 'webpage', path: 'config.htm', name: 'abrp_config', label: 'ABRP Config', menu: 'Config', auth: 'admin', page: '/usr/abrp/config' },
+    { type: 'webpage', path: 'dashboard.htm', name: 'abrp_status', label: 'ABRP Status', menu: 'Vehicle', auth: 'none', page: '/usr/abrp/status' },
+    { type: 'webhook', path: 'status-hook.htm', name: 'abrp_status_hook', page: 'status', hook: 'body.post' },
   ])
 })
 
@@ -143,4 +146,30 @@ test('assemblePages also writes abrp/certdata.js', () => {
 
   const certdata = require(path.join(dir, 'out', 'abrp', 'certdata.js'))
   assert.deepStrictEqual(certdata, [{ file: 'x.crt', pem: 'PEM-X\n' }])
+})
+
+test('manifest web elements are pages/hooks, never module (avoids clobbering abrp)', () => {
+  const els = buildManifest('9.9.9')[0].elements
+  els.filter((e) => /\.htm$/.test(e.path)).forEach((e) => {
+    assert.notStrictEqual(e.type, 'module')
+  })
+})
+
+test('assemblePages copies the web/*.htm assets into abrp/', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pages-web-'))
+  const bundle = path.join(dir, 'src-abrp.js')
+  fs.writeFileSync(bundle, '// fake bundle\nmodule.exports = {}\n')
+  const certDir = path.join(dir, 'certs'); fs.mkdirSync(certDir)
+  fs.writeFileSync(path.join(certDir, 'x.crt'), 'PEM-X\n')
+  const webDir = path.join(dir, 'web'); fs.mkdirSync(webDir)
+  fs.writeFileSync(path.join(webDir, 'config.htm'), '<i>config</i>\n')
+  fs.writeFileSync(path.join(webDir, 'dashboard.htm'), '<i>dash</i>\n')
+  fs.writeFileSync(path.join(webDir, 'status-hook.htm'), '<i>hook</i>\n')
+
+  assemblePages(path.join(dir, 'out'), bundle, '9.9.9', certDir, webDir)
+
+  const outAbrp = path.join(dir, 'out', 'abrp')
+  assert.ok(fs.existsSync(path.join(outAbrp, 'config.htm')))
+  assert.ok(fs.existsSync(path.join(outAbrp, 'dashboard.htm')))
+  assert.ok(fs.existsSync(path.join(outAbrp, 'status-hook.htm')))
 })
