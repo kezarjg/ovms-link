@@ -131,10 +131,17 @@ brainstorm → spec → plan → implement cycle:
      dashboard (`/usr/abrp/status`), and status-hook line ship as
      `webpage`/`webhook` plugin elements; the module exposes `webStatus()` and
      `webIdentityRefresh()` as the command-bridge entry points.
-   - **SP2b (OAuth2 onboarding + plan dashboard) — deferred; blocked on registering
-     a dedicated Iternio OAuth2 client** (`contact@iternio.com`). OAuth2 requires a
-     `redirect_uri` + `client_secret` workable on an embedded module; the plan
-     dashboard is deferred alongside it.
+   - **SP2b (OAuth2 onboarding + plan dashboard) — deferred (2026-06-06); blocked on
+     two external unknowns** that a registration email to Iternio
+     (`contact@iternio.com`) must resolve — drafting/sending that email is the
+     deferred next action: **(1)** registering a dedicated OAuth2 client (`client_id`,
+     app name, an allowed `redirect_uri` workable on an embedded module — it has no
+     public callback; device-code flow isn't offered); **(2)** whether `oauth/token`
+     supports **PKCE** — because a `client_secret` cannot be shipped in this
+     open-source plugin, PKCE (no secret) is required, else a maintainer-run broker
+     must do the token exchange. The plan dashboard (`get_latest_plan`, `get_plan`
+     scope) is deferred alongside. See
+     `docs/research/2026-06-02-abrp-oauth2-findings.md` (open questions 1, 1a, 2).
 3. **Plan + charge-control features** (`get_latest_plan` dashboard, `get_next_charge`
    auto-limit).
 
@@ -183,6 +190,6 @@ independently testable modules (organised under `lib/abrp/` in the repo) — e.g
 | Item | Blocked on |
 | --- | --- |
 | 2.4.0 delta encoding | Iternio answer to issue #41 |
-| 3.0 SP2b OAuth2 onboarding + plan dashboard | Registering a dedicated Iternio OAuth2 client (`contact@iternio.com`) — **open blocker** |
+| 3.0 SP2b OAuth2 onboarding + plan dashboard | Iternio registration email (`contact@iternio.com`) — **deferred/open blocker**: a dedicated OAuth2 client (`client_id` + embedded-workable `redirect_uri`) **and** PKCE support on `oauth/token` (no shippable `client_secret`) |
 | 3.0 one-command install | CA-cert bootstrap approach — **resolved in 3.0.0-alpha.1** (certdata element + first-run install) |
 | 3.0 openvehicles distribution | Coordination to (re-)publish `abrp` to the default repo |

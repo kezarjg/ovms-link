@@ -75,8 +75,24 @@ namespace as the plugin's `overrideMetricMap` vehicle handling.
 1. **Register the OAuth2 client** with Iternio (`contact@iternio.com`): obtain a
    `client_id` / `client_secret`, set the **application name** and an allowed
    **`redirect_uri`**. **Everything else below is blocked on this.**
+   **STATUS: deferred (2026-06-06).** Drafting/sending this registration email is the
+   deferred next action that unblocks SP2b (OAuth2 onboarding + plan dashboard). The
+   email should also raise questions 2 and 1a below so the answers come back in one
+   round.
+1a. **Secret handling on a distributed, open-source plugin (a SECOND blocker).**
+   `oauth/token` (step 2) expects a `client_secret`. This plugin ships its source to
+   every user, so the secret **cannot be embedded** (anyone could extract it and
+   impersonate the app). The clean fix is **PKCE** (no secret; a per-flow code
+   challenge) — *does Iternio's `oauth/token` support PKCE?* If **yes**, the module can
+   run the whole flow itself. If **no**, the code→token exchange must happen on a
+   **small hosted broker** the maintainer operates (holds the secret), which is extra
+   infrastructure. Ask Iternio about PKCE in the registration email — the answer
+   determines the whole SP2b architecture. (Shipping the secret in the open bundle is
+   not acceptable.)
 2. **Which redirect strategy** is registered/acceptable for an embedded module (module
-   web-UI capture vs. out-of-band copy-code)?
+   web-UI / LAN-IP capture vs. out-of-band copy-code; loopback/localhost allowed?)?
+   The module has no public callback URL — device-code flow would solve this but ABRP
+   doesn't offer it.
 3. **Manual-flow experiment (once a client exists):** complete `oauth/auth`
    (scope `get_plan`) in a browser, exchange the returned `code` at `oauth/token`, then
    call `get_latest_plan` — to capture the **plan response shape** (still unknown; see
