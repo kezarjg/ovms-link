@@ -9,6 +9,8 @@
     "OvmsMetrics": "readonly",
     "OvmsNotify": "readonly",
     "PubSub": "readonly",
+    "VFS": "readonly",
+    "OvmsCommand": "readonly",
     "performance": "readonly",
     "print": "readonly"
   },
