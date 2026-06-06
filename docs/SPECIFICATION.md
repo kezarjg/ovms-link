@@ -398,8 +398,8 @@ but are part of the stable public API — renaming them breaks the web assets.
 
 | Command | Effect |
 | --- | --- |
-| `abrp.webStatus()` | Synchronous JSON snapshot (no network calls) of plugin state: identity (name/email, cached), GPS-time validity, sending state, queue depth, last-send result, sample/send intervals, and key telemetry (SoC/power/speed/is_charging) |
-| `abrp.webIdentityRefresh()` | Async `oauth/me` call that fetches and caches the identity (name + email) from the Iternio API; result surfaced on next `webStatus()` call |
+| `abrp.webStatus()` | Synchronous JSON snapshot (no network calls) of plugin state: identity (name/vehicle, cached), GPS-time validity, sending state, queue depth, last-send result, and key telemetry (SoC/power/speed/is_charging) |
+| `abrp.webIdentityRefresh()` | Async `oauth/me` call that fetches and caches the identity (name + vehicle + typecode) from the Iternio API; result surfaced on next `webStatus()` call |
 
 ### 6.5 Web UI
 
