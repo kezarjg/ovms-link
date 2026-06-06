@@ -126,6 +126,15 @@ brainstorm → spec → plan → implement cycle:
    implemented in 3.0.0-alpha.1; CA-cert bootstrap **complete** (certdata element
    writes roots to `/store/trustedca` + `tls trust reload` at first run).
 2. **Web UI shell + config page + OAuth2 onboarding** (onboarding/observability).
+   - **SP2a (web shell + config page + status dashboard + status hook) — implemented
+     in 3.0.0-alpha.2.** The config page (`/usr/abrp/config`, admin), status
+     dashboard (`/usr/abrp/status`), and status-hook line ship as
+     `webpage`/`webhook` plugin elements; the module exposes `webStatus()` and
+     `webIdentityRefresh()` as the command-bridge entry points.
+   - **SP2b (OAuth2 onboarding + plan dashboard) — deferred; blocked on registering
+     a dedicated Iternio OAuth2 client** (`contact@iternio.com`). OAuth2 requires a
+     `redirect_uri` + `client_secret` workable on an embedded module; the plan
+     dashboard is deferred alongside it.
 3. **Plan + charge-control features** (`get_latest_plan` dashboard, `get_next_charge`
    auto-limit).
 
@@ -174,6 +183,6 @@ independently testable modules (organised under `lib/abrp/` in the repo) — e.g
 | Item | Blocked on |
 | --- | --- |
 | 2.4.0 delta encoding | Iternio answer to issue #41 |
-| 3.0 OAuth2 onboarding | Embedded-friendly redirect strategy |
+| 3.0 SP2b OAuth2 onboarding + plan dashboard | Registering a dedicated Iternio OAuth2 client (`contact@iternio.com`) — **open blocker** |
 | 3.0 one-command install | CA-cert bootstrap approach — **resolved in 3.0.0-alpha.1** (certdata element + first-run install) |
 | 3.0 openvehicles distribution | Coordination to (re-)publish `abrp` to the default repo |

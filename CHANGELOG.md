@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 3.0.0-alpha.2 (unreleased)
+
+- Web UI: a **config page** (`/usr/abrp/config`, admin) to enter the ABRP token and
+  cadence intervals with a live "Connected as …" check via `oauth/me`; a read-only
+  **status dashboard** (`/usr/abrp/status`) showing connection/identity, GPS-time
+  validity, sending state, queue depth, last-send result, and key telemetry
+  (SoC/power/speed/charging); and a **status-page hook** line ("ABRP: connected · N
+  queued"). The pages ship as `webpage`/`webhook` plugin elements and talk to the
+  module via `abrp.webStatus()` / `abrp.webIdentityRefresh()`.
+- OAuth2 onboarding and the plan dashboard remain deferred (blocked on registering a
+  dedicated Iternio OAuth2 client).
+
 ## 3.0.0-alpha.1 (unreleased)
 
 - Change-based telemetry: sample every `usr abrp.sample_interval` seconds (1-5,

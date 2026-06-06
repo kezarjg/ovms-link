@@ -1,7 +1,7 @@
 # ovms-link — Project Specification
 
-**Version:** 3.0.0-alpha.1
-**Status:** Current (reflects the `lib/abrp/` modules / `dist/abrp.js` as of 3.0.0-alpha.1)
+**Version:** 3.0.0-alpha.2
+**Status:** Current (reflects the `lib/abrp/` modules / `dist/abrp.js` as of 3.0.0-alpha.2)
 **Audience:** Maintainers and integrators of the OVMS → ABRP telemetry plugin.
 
 This document specifies the complete behavior of the plugin as built. It is
@@ -390,6 +390,45 @@ Invoked as `script eval abrp.<fn>()`:
 | `abrp.send(1)` / `abrp.send(0)` | Start / stop periodic sending |
 | `abrp.resetConfig()` | Stop sending and delete the stored token |
 
+#### Web command-bridge entry points (keep stable)
+
+The web pages invoke these via the OVMS command bridge
+(`loadcmd("script eval abrp.<fn>()")`). They are **not** typed directly by users
+but are part of the stable public API — renaming them breaks the web assets.
+
+| Command | Effect |
+| --- | --- |
+| `abrp.webStatus()` | Synchronous JSON snapshot (no network calls) of plugin state: identity (name/email, cached), GPS-time validity, sending state, queue depth, last-send result, sample/send intervals, and key telemetry (SoC/power/speed/is_charging) |
+| `abrp.webIdentityRefresh()` | Async `oauth/me` call that fetches and caches the identity (name + email) from the Iternio API; result surfaced on next `webStatus()` call |
+
+### 6.5 Web UI
+
+The plugin ships three web assets as plugin elements (added to the manifest in
+3.0.0-alpha.2). They provide in-browser access to configuration and status without
+requiring the OVMS shell.
+
+| Asset | Element type | Path | Auth | Purpose |
+| --- | --- | --- | --- | --- |
+| `config.htm` | `webpage` | `/usr/abrp/config` | admin login required | Enter/save ABRP token and cadence intervals; live "Connected as …" identity check |
+| `dashboard.htm` | `webpage` | `/usr/abrp/status` | open (no login) | Read-only dashboard: connection/identity, GPS-time validity, sending state, queue depth, last-send result, key telemetry (SoC/power/speed/charging) |
+| `status-hook.htm` | `webhook` | *(injected into OVMS status page)* | — | Adds an "ABRP: connected · N queued" line to the OVMS web console status page |
+
+**Command-bridge model.** The pages communicate with the running plugin via the
+OVMS command bridge: the browser fetches `/api/execute?command=script+eval+abrp.webStatus()`
+(or `abrp.webIdentityRefresh()`), and the OVMS firmware relays the result.
+`webStatus()` is **synchronous and network-free** — it returns a JSON snapshot of
+in-memory state immediately. `webIdentityRefresh()` is **asynchronous** — it fires
+an `HTTP.Request` to the Iternio `oauth/me` endpoint and caches the result; the
+response is surfaced on the next `webStatus()` call rather than returned inline.
+
+**Why `webpage`/`webhook`, not `module`.** A `module` element is auto-loaded by
+the OVMS framework as `abrp = require("plugin/abrp/abrp")`, which would clobber
+the global `abrp` object if a second file were loaded as another `module`. The web
+assets are data files (HTML), not executable modules, so they use the `webpage`
+and `webhook` element types, which install files without auto-evaluating them.
+
+**Design spec:** `docs/superpowers/specs/2026-06-06-sp2a-web-ui-design.md`.
+
 ---
 
 ## 7. Data model — telemetry fields
@@ -430,7 +469,7 @@ conversion). A field is sent only when its OVMS source(s) are present.
 | Constant | Value | Meaning |
 | --- | --- | --- |
 | `OVMS_API_KEY` | (fixed) | The plugin's shared Iternio application key |
-| `VERSION` | `'3.0.0-alpha.1'` | Plugin version (bump on user-facing change; update CHANGELOG) |
+| `VERSION` | `'3.0.0-alpha.2'` | Plugin version (bump on user-facing change; update CHANGELOG) |
 | `DEBUG` | `true` | Verbose debug logging |
 | `SAMPLE_INTERVAL_DEFAULT` | `3` s | Default seconds between samples; overridden by `usr abrp.sample_interval` (1–5) |
 | `SEND_INTERVAL_DEFAULT` | `30` s | Default bulk-flush interval seconds; overridden by `usr abrp.send_interval` (10–60) |
@@ -571,6 +610,12 @@ the manual hand-copy path. On-device validation of the bootstrap: after
 `plugin install`, `tls trust list` shows the roots, `abrp.onetime()` connects
 over TLS, and `usr abrp.certs_version` is set; a reboot performs no reinstall;
 bumping `CERTS_VERSION` reinstalls once.
+
+After `plugin install`, the OVMS web console shows two new menu entries:
+**ABRP Config** (`/usr/abrp/config`, requires admin login) to enter the token and
+cadence settings, and **ABRP Status** (`/usr/abrp/status`) for the read-only
+live-state dashboard. The status page also gains an "ABRP: connected · N queued"
+line via the status hook.
 
 The deliverable is copied into OVMS via the web console (Tools → Editor):
 
