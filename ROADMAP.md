@@ -122,7 +122,9 @@ The release where installation, onboarding, and product scope change together:
 Ship as `3.0.0-alpha.N` / `beta.N` milestones, each its own
 brainstorm → spec → plan → implement cycle:
 
-1. **Plugin packaging + CA-cert bootstrap** (delivery foundation).
+1. **Plugin packaging + CA-cert bootstrap** (delivery foundation) — plugin packaging
+   implemented in 3.0.0-alpha.1; CA-cert bootstrap **complete** (certdata element
+   writes roots to `/store/trustedca` + `tls trust reload` at first run).
 2. **Web UI shell + config page + OAuth2 onboarding** (onboarding/observability).
 3. **Plan + charge-control features** (`get_latest_plan` dashboard, `get_next_charge`
    auto-limit).
@@ -173,5 +175,5 @@ independently testable modules (organised under `lib/abrp/` in the repo) — e.g
 | --- | --- |
 | 2.4.0 delta encoding | Iternio answer to issue #41 |
 | 3.0 OAuth2 onboarding | Embedded-friendly redirect strategy |
-| 3.0 one-command install | CA-cert bootstrap approach |
+| 3.0 one-command install | CA-cert bootstrap approach — **resolved in 3.0.0-alpha.1** (certdata element + first-run install) |
 | 3.0 openvehicles distribution | Coordination to (re-)publish `abrp` to the default repo |

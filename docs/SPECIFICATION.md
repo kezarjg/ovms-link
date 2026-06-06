@@ -437,6 +437,7 @@ conversion). A field is sent only when its OVMS source(s) are present.
 | `HEARTBEAT_INTERVAL` | `160` s | Keep-alive: force a point if none queued for this long (`0` disables; < OVMS API-key staleness) |
 | `ROUNDING` | (map) | Per-field rounding precision (also the change threshold, §5.1) |
 | `MAX_TELEMETRY_QUEUE_SIZE` | `100` | Queue cap; oldest dropped on overflow |
+| `CERTS_VERSION` | `1` | Cert-set version; bumped when `trustedca/` changes to force a one-time reinstall of the CA roots |
 
 The per-user `user_token` and the two cadence config keys all come from OVMS config,
 not constants: `usr abrp.user_token`, `usr abrp.sample_interval` (sampling cadence,
@@ -517,19 +518,17 @@ Changes to `usr abrp.sample_interval` / `usr abrp.send_interval` apply **live** 
    `publish.js` / `npm run release` builds the bundle and publishes a `gh-pages`
    plugin repo (`plugins.json` + `abrp/abrp.js`), enabling
    `plugin repo install abrp https://kezarjg.github.io/ovms-link/` then
-   `plugin install abrp` / `plugin update abrp`. **What remains:** (a) the
-   cert-install bootstrap — the OVMS plugin element types
-   (`module`/`json`/`webpage`/`webhook`/`webrsc`) have **no element for installing
-   trusted root CAs** to `/store/trustedca` + running `tls trust reload`, so the CA
-   certs (§3, §12) cannot be auto-installed by the plugin alone — they remain a
-   manual prerequisite unless the plugin bootstraps them at first run; and (b)
-   submission to the default `openvehicles` repo
-   (`http://api.openvehicles.com/plugins`). Note: as of 2026-06 that repo's
-   `plugins.json` no longer lists `abrp` — the legacy `0.1` entry has been
-   **removed** (a `plugin list` may still show it as a stale cached install) — and
-   the OVMS firmware's `plugin/abrp/README.rst` already redirects users to this
-   project, so submission would be a **clean addition to an empty slot**, not a
-   takeover.
+   `plugin install abrp` / `plugin update abrp`. **What remains:** submission to the
+   default `openvehicles` repo (`http://api.openvehicles.com/plugins`). Note: as of
+   2026-06 that repo's `plugins.json` no longer lists `abrp` — the legacy `0.1`
+   entry has been **removed** (a `plugin list` may still show it as a stale cached
+   install) — and the OVMS firmware's `plugin/abrp/README.rst` already redirects
+   users to this project, so submission would be a **clean addition to an empty
+   slot**, not a takeover. The cert-install bootstrap is now **RESOLVED in
+   3.0.0-alpha.1** — the plugin ships the curated CA roots as a second `certdata`
+   `module` element and, at first run, writes them to `/store/trustedca` and runs
+   `tls trust reload`, gated by a `usr abrp.certs_version` stamp (see
+   `docs/superpowers/specs/2026-06-06-ws3-cert-bootstrap-design.md`).
 5. **Cold-boot session detection — RESOLVED in 3.0.0-alpha.1.** `manageVehicleStateEvents`
    now synthesizes `callbackVehicleOn()` at startup when **either** `OvmsMetrics.Value('v.e.on')`
    **or** `OvmsMetrics.Value('v.c.charging')` is truthy (§4.4, `events.js`), so a reboot
@@ -563,6 +562,14 @@ auto-loads as `abrp = require("plugin/abrp/abrp")`; no `ovmsmain.js`); or (b) th
 (`publish.js`). Either way, the CA-certificate install, token configuration, and
 JS-engine reload steps below still apply — the plugin store only replaces the
 file-copy steps (1–2).
+
+Under the plugin-store path the CA-certificate step is **automatic**: the plugin
+writes the curated roots to `/store/trustedca` and runs `tls trust reload` at
+first run (gated by `usr abrp.certs_version`), so step 3 below is needed only for
+the manual hand-copy path. On-device validation of the bootstrap: after
+`plugin install`, `tls trust list` shows the roots, `abrp.onetime()` connects
+over TLS, and `usr abrp.certs_version` is set; a reboot performs no reinstall;
+bumping `CERTS_VERSION` reinstalls once.
 
 The deliverable is copied into OVMS via the web console (Tools → Editor):
 

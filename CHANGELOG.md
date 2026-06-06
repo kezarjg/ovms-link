@@ -24,6 +24,11 @@
   then `plugin install abrp`. A `publish.js` / `npm run release` builds the bundle and
   publishes the plugin repo (`plugins.json` + `abrp/abrp.js`) to a `gh-pages` branch.
   The manual hand-copy install is retained as a fallback.
+- Plugin install now bootstraps the runtime CA roots: the curated `trustedca/` set
+  ships as a second `certdata` plugin element and is written to `/store/trustedca`
+  with `tls trust reload` at first run, gated by a `usr abrp.certs_version` stamp
+  (re-runs only when the cert set is bumped). The manual cert step is retained for
+  the hand-copy install.
 
 ## Version 2.3.0, 2026-06-02, `kezarjg`
 
