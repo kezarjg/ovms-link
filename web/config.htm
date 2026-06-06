@@ -1,0 +1,66 @@
+<div class="panel panel-primary">
+  <div class="panel-heading">ABRP Configuration</div>
+  <div class="panel-body">
+    <form class="form-horizontal" onsubmit="return false;">
+      <div class="form-group">
+        <label class="control-label col-sm-3" for="abrp-token">ABRP user token</label>
+        <div class="col-sm-9">
+          <input type="text" class="form-control" id="abrp-token" placeholder="enter token">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="control-label col-sm-3" for="abrp-sample">Sample interval (1-5 s)</label>
+        <div class="col-sm-9"><input type="number" min="1" max="5" class="form-control" id="abrp-sample"></div>
+      </div>
+      <div class="form-group">
+        <label class="control-label col-sm-3" for="abrp-send">Send interval (10-60 s)</label>
+        <div class="col-sm-9"><input type="number" min="10" max="60" class="form-control" id="abrp-send"></div>
+      </div>
+      <div class="form-group">
+        <div class="col-sm-offset-3 col-sm-9">
+          <button type="button" class="btn btn-default" id="abrp-save">Save</button>
+          <button type="button" class="btn btn-default" id="abrp-validate">Validate token</button>
+          <span id="abrp-identity" style="margin-left:1em;"></span>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function(){
+  function load(){
+    loadcmd("config list usr abrp.").then(function(out){
+      var m;
+      m = out.match(/sample_interval:\s*(\d+)/); if (m) $('#abrp-sample').val(m[1]);
+      m = out.match(/send_interval:\s*(\d+)/); if (m) $('#abrp-send').val(m[1]);
+      if (/user_token:/.test(out)) $('#abrp-token').attr('placeholder', '•••• configured');
+    });
+  }
+  $('#abrp-save').on('click', function(){
+    var cmds = [];
+    var tok = $('#abrp-token').val().trim();
+    if (tok) cmds.push('config set usr abrp.user_token ' + tok);
+    var s = $('#abrp-sample').val(); if (s) cmds.push('config set usr abrp.sample_interval ' + s);
+    var v = $('#abrp-send').val(); if (v) cmds.push('config set usr abrp.send_interval ' + v);
+    var chain = $.Deferred().resolve().promise();
+    cmds.forEach(function(c){ chain = chain.then(function(){ return loadcmd(c); }); });
+    chain.then(function(){ $('#abrp-identity').text('Saved.'); $('#abrp-token').val(''); });
+  });
+  $('#abrp-validate').on('click', function(){
+    $('#abrp-identity').text('Checking…');
+    loadcmd("script eval abrp.webIdentityRefresh()").then(function(){
+      window.setTimeout(function(){
+        loadcmd("script eval abrp.webStatus()").then(function(out){
+          try {
+            var st = JSON.parse(out), id = st.identity || {};
+            if (id.state === 'ok') $('#abrp-identity').text('Connected as ' + id.name + ' — ' + id.vehicle);
+            else if (id.state === 'checking') $('#abrp-identity').text('Checking…');
+            else $('#abrp-identity').text('Not connected (' + (id.error || 'error') + ')');
+          } catch(e){ $('#abrp-identity').text('unavailable'); }
+        });
+      }, 1500);
+    });
+  });
+  load();
+})();
+</script>
