@@ -22,7 +22,7 @@ test('buildManifest returns one abrp entry with the given version', () => {
   assert.ok(e.prerequisites.includes('ovms>=3.3.004'))
   assert.deepStrictEqual(e.elements, [
     { type: 'module', path: 'abrp.js', name: 'abrp' },
-    { type: 'module', path: 'certdata.js', name: 'abrp_certdata' },
+    { type: 'webrsc', path: 'certdata.js', name: 'abrp_certdata' },
   ])
 })
 
@@ -123,6 +123,12 @@ test('renderCertData emits a Duktape-safe module exporting the entries', () => {
   fs.writeFileSync(out, code)
   delete require.cache[require.resolve(out)]
   assert.deepStrictEqual(require(out), entries)
+})
+
+test('certdata element is NOT a module (avoids clobbering the abrp global on auto-load)', () => {
+  const cd = buildManifest('9.9.9')[0].elements.find((e) => e.path === 'certdata.js')
+  assert.ok(cd)
+  assert.notStrictEqual(cd.type, 'module')
 })
 
 test('assemblePages also writes abrp/certdata.js', () => {

@@ -51,17 +51,20 @@ separate element):
   `trustedca/*.pem`, **not** part of `lib/` source. A Duktape-safe JS file installed
   as `/store/plugins/abrp/certdata.js` that does
   `module.exports = [{ file: "gdroot-g2.crt", pem: "-----BEGIN…\n…\n-----END-----\n" }, …]`.
-  Shipped as a **second `module` element** in the manifest.
-  - It is **pure data, side-effect-free** — so even if OVMS auto-evaluates it
-    standalone at engine start, nothing happens. That neutralizes the roadmap's
-    "multiple `module` elements is untrodden" caveat: correctness does not depend on
-    the auto-wiring behavior. The entry reads it explicitly via
-    `require("plugin/abrp/certdata")`.
-  - Why a `module` element and not `json`/`webrsc`: it reuses the **already-verified**
-    `require("plugin/abrp/<part>")` resolver (resolves to `/store/plugins/abrp/<part>.js`),
-    so reading the cert data is a synchronous in-memory require — no `VFS.Load`, no
-    dependence on uncertain `json`-element semantics. `VFS.Save` is still used to
-    **write** into `/store/trustedca`.
+  Shipped as a **`webrsc` element** (download-only) in the manifest.
+  - Why `webrsc` and NOT a second `module` element: OVMS's `LoadEnabledModules`
+    (verified in `ovms_plugins.cpp`) auto-evaluates every `module` element as
+    `<plugin_name> = require("plugin/<plugin_name>/<path>")` — using the **plugin
+    name** (`abrp`) as the assignment target, **not** the element's own `name`. A
+    second `module` element would therefore execute
+    `abrp = require("plugin/abrp/certdata")` at engine start, **clobbering the
+    global `abrp`** (the real plugin object) with the cert array and breaking every
+    in-vehicle shell command (`abrp.info()`, `abrp.send(1)`, etc.).
+  - A `webrsc` element is still **downloaded** to `/store/plugins/abrp/certdata.js`
+    by the plugin Download loop (which is type-agnostic), but is **not**
+    auto-evaluated. `require("plugin/abrp/certdata")` still resolves because OVMS
+    require resolution is purely path-based, independent of element type. `VFS.Save`
+    is still used to **write** into `/store/trustedca`.
 
 **Build seam:** `build.js` inlines only *relative* requires (`require('./x')`). The
 bootstrap's `require("plugin/abrp/certdata")` is non-relative, so the bundler leaves
@@ -145,7 +148,7 @@ literals / arrow functions), and `plugins.json` carries **two** elements.
 | `lib/abrp/events.js` | Call `Certs.bootstrap()` from `startup()` under the `typeof` guard. |
 | `lib/abrp/constants.js` | Add `CERTS_VERSION` (bumped by hand when `trustedca/` changes, like `VERSION`). |
 | `lib/abrp/abrp.js` | Wire `Certs` into the `__test` seam / exports as needed. |
-| `publish.js` | Generate `certdata.js` (ES5/Duktape-safe) from `trustedca/*.pem`; add the second element to `plugins.json`; copy it into the gh-pages tree. |
+| `publish.js` | Generate `certdata.js` (ES5/Duktape-safe) from `trustedca/*.pem`; add it as a `webrsc` element (not `module`) to `plugins.json`; copy it into the gh-pages tree. |
 | `.eslintrc.json` | Add `VFS` and the command-exec global (e.g. `OvmsCommand`) to `globals`. |
 | `lib/abrp.test.js` (or new `lib/abrp/certs.test.js`) | The unit tests in §6. |
 | `docs/SPECIFICATION.md` | §11 #4 → cert bootstrap **resolved**; §12 note the plugin auto-installs certs; add the on-device checklist. |

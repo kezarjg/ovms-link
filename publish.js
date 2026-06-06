@@ -26,7 +26,7 @@ function buildManifest(version) {
       prerequisites: ['ovms>=3.3.004'],
       elements: [
         { type: 'module', path: 'abrp.js', name: 'abrp' },
-        { type: 'module', path: 'certdata.js', name: 'abrp_certdata' },
+        { type: 'webrsc', path: 'certdata.js', name: 'abrp_certdata' },
       ],
     },
   ]

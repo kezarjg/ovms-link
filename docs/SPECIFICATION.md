@@ -526,8 +526,9 @@ Changes to `usr abrp.sample_interval` / `usr abrp.send_interval` apply **live** 
    users to this project, so submission would be a **clean addition to an empty
    slot**, not a takeover. The cert-install bootstrap is now **RESOLVED in
    3.0.0-alpha.1** — the plugin ships the curated CA roots as a second `certdata`
-   `module` element and, at first run, writes them to `/store/trustedca` and runs
-   `tls trust reload`, gated by a `usr abrp.certs_version` stamp (see
+   `webrsc` element (download-only, not auto-evaluated) and, at first run, writes
+   them to `/store/trustedca` and runs `tls trust reload`, gated by a
+   `usr abrp.certs_version` stamp (see
    `docs/superpowers/specs/2026-06-06-ws3-cert-bootstrap-design.md`).
 5. **Cold-boot session detection — RESOLVED in 3.0.0-alpha.1.** `manageVehicleStateEvents`
    now synthesizes `callbackVehicleOn()` at startup when **either** `OvmsMetrics.Value('v.e.on')`
