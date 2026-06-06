@@ -4,7 +4,13 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { execFileSync } = require('child_process')
-const { buildManifest, assemblePages, publishToGhPages } = require('../publish')
+const {
+  buildManifest,
+  assemblePages,
+  publishToGhPages,
+  buildCertData,
+  renderCertData,
+} = require('../publish')
 
 test('buildManifest returns one abrp entry with the given version', () => {
   const m = buildManifest('9.9.9')
@@ -14,7 +20,10 @@ test('buildManifest returns one abrp entry with the given version', () => {
   assert.strictEqual(e.name, 'abrp')
   assert.strictEqual(e.version, '9.9.9')
   assert.ok(e.prerequisites.includes('ovms>=3.3.004'))
-  assert.deepStrictEqual(e.elements, [{ type: 'module', path: 'abrp.js', name: 'abrp' }])
+  assert.deepStrictEqual(e.elements, [
+    { type: 'module', path: 'abrp.js', name: 'abrp' },
+    { type: 'module', path: 'certdata.js', name: 'abrp_certdata' },
+  ])
 })
 
 test('manifest version tracks constants.VERSION', () => {
@@ -76,4 +85,56 @@ test('publishToGhPages creates then updates origin/gh-pages with the staged tree
   git(['clone', '-b', 'gh-pages', bare, check], root)
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(check, 'plugins.json'), 'utf8'))[0].version, '2.0.0')
   assert.ok(!fs.existsSync(path.join(check, 'stale.txt')))
+})
+
+test('buildCertData reads trustedca pem/crt files into {file,pem} entries', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'certs-'))
+  fs.writeFileSync(path.join(dir, 'root.crt'), 'PEM-ROOT\n')
+  fs.writeFileSync(path.join(dir, 'amazon.pem'), 'PEM-AMAZON\n')
+  fs.writeFileSync(path.join(dir, 'README.md'), 'ignore me\n')
+
+  const entries = buildCertData(dir)
+  assert.deepStrictEqual(entries, [
+    { file: 'amazon.pem', pem: 'PEM-AMAZON\n' },
+    { file: 'root.crt', pem: 'PEM-ROOT\n' },
+  ])
+})
+
+test('buildCertData/renderCertData handle a dir with no cert files', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'certs-empty-'))
+  fs.writeFileSync(path.join(dir, 'README.md'), 'no certs here\n')
+  assert.deepStrictEqual(buildCertData(dir), [])
+
+  const code = renderCertData([])
+  const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cd-empty-')), 'certdata.js')
+  fs.writeFileSync(out, code)
+  delete require.cache[require.resolve(out)]
+  assert.deepStrictEqual(require(out), [])
+})
+
+test('renderCertData emits a Duktape-safe module exporting the entries', () => {
+  const entries = [{ file: 'a.crt', pem: 'L1\nL2\n' }]
+  const code = renderCertData(entries)
+  assert.ok(!/=>/.test(code)) // no arrow functions
+  assert.ok(!/`/.test(code)) // no template literals
+
+  // It must evaluate to the same array via require.
+  const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cd-')), 'certdata.js')
+  fs.writeFileSync(out, code)
+  delete require.cache[require.resolve(out)]
+  assert.deepStrictEqual(require(out), entries)
+})
+
+test('assemblePages also writes abrp/certdata.js', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pages-cd-'))
+  const bundle = path.join(dir, 'src-abrp.js')
+  fs.writeFileSync(bundle, '// fake bundle\nmodule.exports = {}\n')
+  const certDir = path.join(dir, 'certs')
+  fs.mkdirSync(certDir)
+  fs.writeFileSync(path.join(certDir, 'x.crt'), 'PEM-X\n')
+
+  assemblePages(path.join(dir, 'out'), bundle, '9.9.9', certDir)
+
+  const certdata = require(path.join(dir, 'out', 'abrp', 'certdata.js'))
+  assert.deepStrictEqual(certdata, [{ file: 'x.crt', pem: 'PEM-X\n' }])
 })
