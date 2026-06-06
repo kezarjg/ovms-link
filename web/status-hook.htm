@@ -6,8 +6,10 @@
       var msg = s.token_set
         ? (s.sending ? ('ABRP: connected · ' + s.queue_depth + ' queued') : 'ABRP: idle')
         : 'ABRP: not configured';
+      // Use .text() so any interpolated value is escaped (never build HTML by
+      // concatenating server-provided data).
       $('#abrp-hookline').remove();
-      $('.panel-body').first().prepend('<p id="abrp-hookline"><strong>' + msg + '</strong></p>');
+      $('.panel-body').first().prepend($('<p>').attr('id', 'abrp-hookline').append($('<strong>').text(msg)));
     } catch(e){}
   });
 })();

@@ -8,7 +8,12 @@
 </div>
 <script>
 (function(){
-  function row(k, v){ return '<tr><th style="width:40%">' + k + '</th><td>' + v + '</td></tr>'; }
+  // Build each row with jQuery .text() so server/API-provided values (e.g. the
+  // ABRP account name/vehicle from oauth/me) are escaped — never concatenate
+  // untrusted strings into .html() (XSS).
+  function row(k, v){
+    return $('<tr>').append($('<th>').css('width', '40%').text(k), $('<td>').text(v));
+  }
   function render(s){
     var id = s.identity || {};
     var conn = s.token_set
@@ -18,23 +23,23 @@
     var ls = s.last_send;
     var lsTxt = ls ? ((ls.ok ? 'ok' : 'FAIL') + ' (' + (ls.code || ls.error || '') + ', ' + ls.count + ' pts, ' + ls.ts + ')') : '—';
     var t = s.telemetry || {};
-    var html = '';
-    html += row('Plugin', s.version);
-    html += row('Connection', conn);
-    html += row('GPS time valid', s.time_valid ? 'yes' : 'no');
-    html += row('Sending', s.sending ? 'yes' : 'no');
-    html += row('Queue depth', s.queue_depth);
-    html += row('Last send', lsTxt);
-    if ('soc' in t) html += row('SoC', t.soc + ' %');
-    if ('power' in t) html += row('Power', t.power + ' kW');
-    if ('speed' in t) html += row('Speed', t.speed);
-    if ('is_charging' in t) html += row('Charging', t.is_charging ? 'yes' : 'no');
-    $('#abrp-status-body').html(html);
+    var $body = $('#abrp-status-body');
+    $body.empty();
+    $body.append(row('Plugin', s.version));
+    $body.append(row('Connection', conn));
+    $body.append(row('GPS time valid', s.time_valid ? 'yes' : 'no'));
+    $body.append(row('Sending', s.sending ? 'yes' : 'no'));
+    $body.append(row('Queue depth', s.queue_depth));
+    $body.append(row('Last send', lsTxt));
+    if ('soc' in t) $body.append(row('SoC', t.soc + ' %'));
+    if ('power' in t) $body.append(row('Power', t.power + ' kW'));
+    if ('speed' in t) $body.append(row('Speed', t.speed));
+    if ('is_charging' in t) $body.append(row('Charging', t.is_charging ? 'yes' : 'no'));
   }
   function refresh(){
     loadcmd("script eval abrp.webStatus()").then(function(out){
       try { render(JSON.parse(out)); }
-      catch(e){ $('#abrp-status-body').html('<tr><td>unavailable</td></tr>'); }
+      catch(e){ $('#abrp-status-body').empty().append($('<tr>').append($('<td>').text('unavailable'))); }
     });
   }
   var timer = window.setInterval(refresh, 5000);
