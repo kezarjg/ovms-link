@@ -187,6 +187,12 @@ sample. The interval comes from `usr abrp.sample_interval` (validated 1–5, def
 `SAMPLE_INTERVAL_DEFAULT = 3`) via `Cfg.sampleInterval()`, applied through
 `Q.setSampleInterval()` at session start.
 
+This interval is a floor: under event-loop congestion the sampler stretches its
+effective interval above it (multiplicatively, capped at `BACKOFF_MAX_INTERVAL`) and
+recovers when collects speed up — see the adaptive-cadence controller in `queue.js`
+(`adjustCadence`). The trigger is the sampler's own `createTelemetry()` collect duration
+exceeding `COLLECT_PRESSURE_FACTOR`× a rolling baseline of calm collects.
+
 **Send (flush) interval gate.** `ticker.10` fires every 10 s, but
 `sendBulkTelemetry()` skips unless `m.monotonic` has advanced by `sendInterval`
 seconds since the last flush **attempt** (`lastFlushMono` is stamped when a flush
@@ -469,9 +475,12 @@ conversion). A field is sent only when its OVMS source(s) are present.
 | Constant | Value | Meaning |
 | --- | --- | --- |
 | `OVMS_API_KEY` | (fixed) | The plugin's shared Iternio application key |
-| `VERSION` | `'3.0.0-alpha.2'` | Plugin version (bump on user-facing change; update CHANGELOG) |
+| `VERSION` | `'3.0.0-alpha.3'` | Plugin version (bump on user-facing change; update CHANGELOG) |
 | `DEBUG` | `true` | Verbose debug logging |
 | `SAMPLE_INTERVAL_DEFAULT` | `3` s | Default seconds between samples; overridden by `usr abrp.sample_interval` (1–5) |
+| `COLLECT_PRESSURE_FACTOR` | `3` | A collect slower than this × the rolling baseline counts as congestion (triggers a back-off step) |
+| `BACKOFF_MAX_INTERVAL` | `180` s | Cap for the stretched sample interval under sustained congestion (§5.2) |
+| `COLLECT_BASELINE_ALPHA` | `0.25` | EWMA weight for updating the collect baseline on calm samples |
 | `SEND_INTERVAL_DEFAULT` | `30` s | Default bulk-flush interval seconds; overridden by `usr abrp.send_interval` (10–60) |
 | `HEARTBEAT_INTERVAL` | `160` s | Keep-alive: force a point if none queued for this long (`0` disables; < OVMS API-key staleness) |
 | `ROUNDING` | (map) | Per-field rounding precision (also the change threshold, §5.1) |

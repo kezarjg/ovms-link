@@ -1,7 +1,17 @@
 # CHANGELOG
 
-## 3.0.0-alpha.2 (unreleased)
+## 3.0.0-alpha.3 (unreleased)
 
+- Adaptive sample cadence: the sampler now times its own `createTelemetry()` collect
+  and, when a collect runs slower than `COLLECT_PRESSURE_FACTOR`× its rolling baseline
+  (event-loop congestion), multiplicatively stretches the effective sample interval up
+  to `BACKOFF_MAX_INTERVAL` (180 s), recovering multiplicatively once collects are fast
+  again. `usr abrp.sample_interval` becomes the *floor* (fastest cadence), not a fixed
+  rate. During a deep crisis the interval can exceed `HEARTBEAT_INTERVAL`, intentionally
+  letting the ABRP session lapse until OVMS recovers. Motivated by the 2026-06-07 field
+  logs (18–42 s `ticker.1` stalls from web-dashboard websocket contention). The redundant
+  `>500 ms` collect WARN in `createTelemetry()` is removed (the per-sample cadence DEBUG
+  line and the adaptive back-off supersede it).
 - Web UI: a **config page** (`/usr/abrp/config`, admin) to enter the ABRP token and
   cadence intervals with a live "Connected as …" check via `oauth/me`; a read-only
   **status dashboard** (`/usr/abrp/status`) showing connection/identity, GPS-time
