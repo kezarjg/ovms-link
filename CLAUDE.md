@@ -91,20 +91,30 @@ Key concepts to understand before editing:
   fields only. Only `onetime()` uses the single-shot `/1/tlm/send`. Queued entries are
   removed only after a 200 (+ `status:"ok"`) response.
 - **Change-based cadence** lives in `queue.js`'s `sample()`/`enqueue()`: `ticker.1` is
-  throttled via an `m.monotonic` elapsed-time gate to a configurable `sampleInterval`
-  (`usr abrp.sample_interval`, validated 1–5, default `SAMPLE_INTERVAL_DEFAULT = 3` s,
-  via `Cfg.sampleInterval()`). Each sample takes a full snapshot, rounds each field per
-  the `ROUNDING` precision map, and **enqueues only if a rounded field changed** vs. the
-  last queued point (`changedVsLastQueued`); otherwise a **heartbeat**
-  (`HEARTBEAT_INTERVAL`, default 160 s, `0` disables) forces a point to keep the ABRP
-  session alive. Vehicle-on enqueues a natural full bookend; vehicle-off enqueues a
-  bookend forced to a coherent parked state (`speed`/`power` = 0, `is_parked` = true,
-  `is_charging`/`is_dcfc` = false).
+  throttled via an `m.monotonic` elapsed-time gate to the `effectiveInterval`. That
+  starts at the configured `baseInterval` (`usr abrp.sample_interval`, validated 1–5,
+  default `SAMPLE_INTERVAL_DEFAULT = 3` s, via `Cfg.sampleInterval()`), which acts as a
+  **floor**. Each sample takes a full snapshot, rounds each field per the `ROUNDING`
+  precision map, and **enqueues only if a rounded field changed** vs. the last queued
+  point (`changedVsLastQueued`); otherwise a **heartbeat** (`HEARTBEAT_INTERVAL`,
+  default 160 s, `0` disables) forces a point to keep the ABRP session alive. Vehicle-on
+  enqueues a natural full bookend; vehicle-off enqueues a bookend forced to a coherent
+  parked state (`speed`/`power` = 0, `is_parked` = true, `is_charging`/`is_dcfc` = false).
+- **Adaptive cadence (back-off under congestion)**: `sample()` times its own
+  `createTelemetry()` collect (`performance.now()`) and feeds the duration to the pure
+  `adjustCadence(ms)` controller. A collect slower than `COLLECT_PRESSURE_FACTOR`× a
+  rolling EWMA baseline of calm collects (`collectBaseline`) multiplicatively stretches
+  `effectiveInterval` (×2, capped at `BACKOFF_MAX_INTERVAL = 180` s); a calm collect
+  updates the baseline and multiplicatively recovers (÷2, floored at `baseInterval`).
+  `setSampleInterval(n)` re-floors `effectiveInterval`; `collectBaseline` persists across
+  sessions. In a deep crisis `effectiveInterval` can exceed `HEARTBEAT_INTERVAL`,
+  intentionally letting the ABRP session lapse until collects speed up.
 
 Each module owns its own mutable state and is the only one that mutates it; other
 modules go through its exported accessors (extending the `__test` seam pattern).
-`config.js` owns `user_token`; `queue.js` owns `telemetryToSend`/`lastQueuedTelemetry`
-and the monotonic cadence baselines (`lastSampleMono`/`lastQueuedMono`); `telemetry.js`
+`config.js` owns `user_token`; `queue.js` owns `telemetryToSend`/`lastQueuedTelemetry`,
+the monotonic cadence baselines (`lastSampleMono`/`lastQueuedMono`), and the adaptive
+cadence state (`baseInterval`/`effectiveInterval`/`collectBaseline`); `telemetry.js`
 owns `isSending`; `events.js` owns `subscriptions`/`isActive`/time-valid. All are
 module-level `var`s.
 
