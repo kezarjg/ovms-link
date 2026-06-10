@@ -2,6 +2,16 @@
 
 ## Version 2.3.0, 2026-06-02, `kezarjg`
 
+- Fixed telemetry loss when unplugging with the vehicle already on: the four
+  session events (`vehicle.on/off`, `charge.start/stop`) now feed a single
+  level-based handler (`v.e.on || v.c.charging`), so a `charge.stop` no longer
+  kills the per-second sampler mid-drive, and an overlapping on+charging state
+  no longer double-subscribes it.
+- Fixed the cold-boot check missing an in-progress charge: a module reboot
+  while parked-and-charging now starts a session immediately (previously waited
+  for the next `charge.start` edge).
+- Fixed `send(0)`/`send(1)` cycles stacking `ticker.10` / `vehicle.type.set`
+  subscriptions: teardown is now symmetric with setup.
 - Switched telemetry transmission to bulk uploads (`/1/tlm/bulk`) with a queue.
 - Added GPS-time gating so telemetry is only sent once a valid UTC time is known.
 - Added token-tracking subscribe/unsubscribe wrappers for clean event teardown.
