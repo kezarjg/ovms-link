@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## Unreleased
+
+- Fixed AC-charge send cadence on vehicles whose `is_parked` derives from gear
+  (Toyota e-TNGA `SUBSOL`/`TOYBZ4X`): `calculateMaxElapsedDuration` now decides a
+  charge session before the not-parked path, so a momentarily-absent `is_parked`
+  (the module drops `v.e.gear` while plugged in) no longer throttles standard (AC)
+  charging onto the 160 s stale-connection cadence instead of the intended 30-min
+  charging cadence. DC fast charging is unchanged (still the 160 s fast path).
+- Expanded the unit test suite to characterize the cadence selector, metric
+  derivations (`is_dcfc`/`is_parked`), vehicle overrides, charging payload shape,
+  queue overflow cap, bulk-send fail-path, and the event-flow lifecycle.
+
 ## Version 2.3.0, 2026-06-02, `kezarjg`
 
 - Switched telemetry transmission to bulk uploads (`/1/tlm/bulk`) with a queue.
