@@ -2,6 +2,13 @@
 
 ## 3.0.0-alpha.3 (unreleased)
 
+- Fixed telemetry loss when unplugging with the vehicle already on: the four
+  session events (`vehicle.on/off`, `charge.start/stop`) now feed a single
+  level-based handler (`v.e.on || v.c.charging`), so a `charge.stop` no longer
+  kills the per-second sampler mid-drive, and an overlapping on+charging state
+  no longer double-subscribes it.
+- Fixed `send(0)`/`send(1)` cycles stacking `ticker.10` / `vehicle.type.set`
+  subscriptions: teardown is now symmetric with setup.
 - Adaptive sample cadence: the sampler now times its own `createTelemetry()` collect
   and, when a collect runs slower than `COLLECT_PRESSURE_FACTOR`× its rolling baseline
   (event-loop congestion), multiplicatively stretches the effective sample interval up
