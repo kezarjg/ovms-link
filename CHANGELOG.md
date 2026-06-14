@@ -2,6 +2,15 @@
 
 ## 3.0.0-alpha.3 (unreleased)
 
+- Charge deadband: while charging, `changedVsLastQueued` now ignores sub-threshold
+  jitter on `power`/`current`/`voltage` per the `CHARGE_DEADBAND` map (defaults
+  1 kW / 5 A / 2 V) so noisy DC fast-charge readings no longer force a queued point
+  every sample. SOC steps, state flips, and any other changed field still queue
+  normally, and each deadband measures against the last *queued* value so a slow drift
+  still accumulates. Driving keeps full per-`ROUNDING` resolution (deadband is
+  charge-only); omit a field or set its entry to `0` to disable it. Motivated by
+  2026-06-13 field logs where DC fast charging produced ~70% of the session's queued
+  points (≈64% of upload), dominated by sub-kW power jitter plus current/voltage noise.
 - Fixed telemetry loss when unplugging with the vehicle already on: the four
   session events (`vehicle.on/off`, `charge.start/stop`) now feed a single
   level-based handler (`v.e.on || v.c.charging`), so a `charge.stop` no longer
