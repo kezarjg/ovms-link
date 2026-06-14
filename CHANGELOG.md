@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Charge-power deadband: `isSignificantTelemetryChange` now treats a charging power
+  move as significant only when it is at least `CHARGE_POWER_DELTA_KW` (default 1 kW),
+  replacing the old `round(power)` integer compare. That stops noisy DC fast-charge
+  power from forcing a queued point every sample on sub-kW jitter that merely crosses
+  an integer boundary; the deadband measures against the last queued point so a slow
+  ramp still accumulates. SoC and state changes still queue normally. Backport of the
+  3.0 `CHARGE_DEADBAND` change (2.x has no current/voltage significance triggers, so
+  only power needs damping). Motivated by 2026-06-13 field logs where a low-SOC DCFC
+  session produced ~68% of its charging points from sub-kW power jitter.
 - Fixed AC-charge send cadence on vehicles whose `is_parked` derives from gear
   (Toyota e-TNGA `SUBSOL`/`TOYBZ4X`): `calculateMaxElapsedDuration` now decides a
   charge session before the not-parked path, so a momentarily-absent `is_parked`
