@@ -2,51 +2,26 @@
 
 ## Version 2.3.0, 2026-06-25, `kezarjg`
 
-- Charge-power deadband: `isSignificantTelemetryChange` now treats a charging power
-  move as significant only when it is at least `CHARGE_POWER_DELTA_KW` (default 1 kW),
-  replacing the old `round(power)` integer compare. That stops noisy DC fast-charge
-  power from forcing a queued point every sample on sub-kW jitter that merely crosses
-  an integer boundary; the deadband measures against the last queued point so a slow
-  ramp still accumulates. SoC and state changes still queue normally. Backport of the
-  3.0 `CHARGE_DEADBAND` change (2.x has no current/voltage significance triggers, so
-  only power needs damping). Motivated by 2026-06-13 field logs where a low-SOC DCFC
-  session produced ~68% of its charging points from sub-kW power jitter.
-- Fixed AC-charge send cadence on vehicles whose `is_parked` derives from gear
-  (Toyota e-TNGA `SUBSOL`/`TOYBZ4X`): `calculateMaxElapsedDuration` now decides a
-  charge session before the not-parked path, so a momentarily-absent `is_parked`
-  (the module drops `v.e.gear` while plugged in) no longer throttles standard (AC)
-  charging onto the 160 s stale-connection cadence instead of the intended 30-min
-  charging cadence. DC fast charging is unchanged (still the 160 s fast path).
-- Expanded the unit test suite to characterize the cadence selector, metric
-  derivations (`is_dcfc`/`is_parked`), vehicle overrides, charging payload shape,
-  queue overflow cap, bulk-send fail-path, and the event-flow lifecycle.
-- Fixed telemetry loss when unplugging with the vehicle already on: the four
-  session events (`vehicle.on/off`, `charge.start/stop`) now feed a single
-  level-based handler (`v.e.on || v.c.charging`), so a `charge.stop` no longer
-  kills the per-second sampler mid-drive, and an overlapping on+charging state
-  no longer double-subscribes it.
-- Fixed the cold-boot check missing an in-progress charge: a module reboot
-  while parked-and-charging now starts a session immediately (previously waited
-  for the next `charge.start` edge).
-- Fixed `send(0)`/`send(1)` cycles stacking `ticker.10` / `vehicle.type.set`
-  subscriptions: teardown is now symmetric with setup.
-- Switched telemetry transmission to bulk uploads (`/1/tlm/bulk`) with a queue.
-- Added GPS-time gating so telemetry is only sent once a valid UTC time is known.
-- Added token-tracking subscribe/unsubscribe wrappers for clean event teardown.
-- Wired `capacity` (from `v.b.capacity`) and derived `soe` (`SoC × capacity`).
-- `hvac_power` is now supported only where a vehicle-specific override provides it.
-- Wired `hvac_power` for the Toyota e-TNGA (`SUBSOL`/`TOYBZ4X`) from `xte.v.e.hvac.power`.
-- Fixed tyre-pressure sources: read the `v.t.pressure` vector (FL=0, FR=1, RL=2, RR=3) instead of the non-existent `v.tp.*.p` metrics.
-- Fixed telemetry loss on concurrent bulk flush (batch is snapshotted before send).
-- Fixed silent data loss: the queue is cleared only when the API confirms success
-  (HTTP 200 *and* JSON body `status: "ok"`), not on HTTP 200 alone.
-- Restored median power/speed smoothing while driving on the default (non-bandwidth-saver) path; charging continues to send instantaneous power.
-- Fixed a latent Nissan Leaf range-override bug (implicit globals under strict mode).
-- Fixed a further telemetry-loss edge case: when the queue is full during an
-  in-flight bulk flush, the sent batch is removed **by identity**, so a concurrent
-  overflow drop cannot discard never-sent points.
-- Made `lib/abrp.js` require()-able under Jest and expanded the unit test suite
-  (`lib/abrp.test.js`).
+- Switched telemetry to batched bulk uploads (`/1/tlm/bulk`) behind a queue, with
+  GPS-time gating so points are only sent once a valid UTC time is known.
+- Reliability: the queue is cleared only when the API confirms success (HTTP 200
+  *and* body `status: "ok"`), the in-flight batch is removed by identity, and queue
+  overflow can no longer discard never-sent points — closing several data-loss paths.
+- Session handling: a single level-based handler drives the four session events, so a
+  `charge.stop` no longer kills the sampler mid-drive, a reboot while parked-and-charging
+  resumes immediately, overlapping on+charging no longer double-subscribes, and
+  `send(0)`/`send(1)` teardown is symmetric with setup.
+- Charge-power deadband: charging-power changes under 1 kW no longer force a queued
+  point, cutting the DC fast-charge point flood without losing SoC progression or the
+  charge curve.
+- Fixed AC-charge send cadence on Toyota e-TNGA (`SUBSOL`/`TOYBZ4X`): a momentarily-absent
+  `is_parked` no longer throttles AC charging onto the stale-connection cadence.
+- Restored median power/speed smoothing while driving; charging sends instantaneous power.
+- Metrics: wired `capacity` and derived `soe`; `hvac_power` is now supplied only via
+  vehicle overrides (incl. Toyota e-TNGA); fixed tyre pressure to read the `v.t.pressure` vector.
+- Fixed a Nissan Leaf range-override bug.
+- Added a unit-test suite (`lib/abrp.test.js`) covering the telemetry pipeline, cadence
+  selector, metric derivations, and vehicle overrides.
 
 ## Version 2.2.0, 2025-05-21, `kezarjg`
 
