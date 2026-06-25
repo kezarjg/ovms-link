@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## Unreleased
+## Version 2.3.0, 2026-06-25, `kezarjg`
 
 - Charge-power deadband: `isSignificantTelemetryChange` now treats a charging power
   move as significant only when it is at least `CHARGE_POWER_DELTA_KW` (default 1 kW),
@@ -20,9 +20,6 @@
 - Expanded the unit test suite to characterize the cadence selector, metric
   derivations (`is_dcfc`/`is_parked`), vehicle overrides, charging payload shape,
   queue overflow cap, bulk-send fail-path, and the event-flow lifecycle.
-
-## Version 2.3.0, 2026-06-02, `kezarjg`
-
 - Fixed telemetry loss when unplugging with the vehicle already on: the four
   session events (`vehicle.on/off`, `charge.start/stop`) now feed a single
   level-based handler (`v.e.on || v.c.charging`), so a `charge.stop` no longer
