@@ -1,7 +1,9 @@
 # ovms-link — Release Roadmap
 
-**Last updated:** 2026-06-02
-**Current line:** `2.3.0` (on branch `refactor/abrp-2.3.0`, in on-vehicle testing)
+**Last updated:** 2026-07-03
+**Current line:** `2.3.0` validated on-vehicle (two weeks) and open as upstream PR
+[#43](https://github.com/iternio/ovms-link/pull/43); active development on `3.0.0`
+(branch `feature/abrp-3.0.0`, at `3.0.0-alpha.3`).
 
 This roadmap is the plan of record for upcoming work. Items past 2.3.0 are
 proposals with explicit gating dependencies — they are not committed until those
@@ -28,8 +30,8 @@ point at which the manual hand-copy era is deprecated.
 
 | Version | Theme | Delivery | Gating |
 | --- | --- | --- | --- |
-| `2.3.0` | Pipeline + data integrity (incl. overflow fix + test rename) | Hand-installed single file | On-vehicle test |
-| `3.0.0` | Plugin platform (+ bandwidth delta encoding, plan awareness) | OVMS plugin (+ web UI) | OAuth2 redirect; cert bootstrap |
+| `2.3.0` | Pipeline + data integrity (incl. overflow fix + test rename) | Hand-installed single file | ✅ validated; PR [#43](https://github.com/iternio/ovms-link/pull/43) open |
+| `3.0.0` | Plugin platform (+ bandwidth delta encoding, plan awareness) | OVMS plugin (+ web UI) | OAuth2 redirect; ~~cert bootstrap~~ ✅ |
 
 > The previously-planned `2.4.0` has been **dissolved** — its features moved into
 > 3.0.0 (see below). 2.3.0 ships as the validated core with nothing bolted on
@@ -37,12 +39,21 @@ point at which the manual hand-copy era is deprecated.
 
 ---
 
-## 2.3.0 — Pipeline + data integrity (in testing)
+## 2.3.0 — Pipeline + data integrity (validated; upstream PR open)
 
-**Status:** code-complete and verified on `refactor/abrp-2.3.0` (26 unit tests
-pass, ESLint clean, `VERSION = '2.3.0'`, `package.json` 2.3.0). Includes the former
-2.3.1 quality fixes (queue-overflow-during-in-flight removal **by identity**, and
-the `arbp.test.js` → `abrp.test.js` rename), folded in since 2.3.0 had not shipped.
+**Status:** validated on-vehicle and open as upstream PR
+[#43](https://github.com/iternio/ovms-link/pull/43) (branch `pr/abrp-2.3.0`, a clean
+fast-forward on `dev`). 64 unit tests pass, ESLint clean, `DEBUG = false`,
+`VERSION = '2.3.0'`, `package.json` 2.3.0. Includes the former 2.3.1 quality fixes
+(queue-overflow-during-in-flight removal **by identity**, and the
+`arbp.test.js` → `abrp.test.js` rename), folded in since 2.3.0 had not shipped.
+
+Two weeks of field logs (Jun 19–Jul 1, Subaru Solterra) confirmed steady-state
+charging is jitter-free, DCFC detection fires on real fast charges, the session
+state machine pairs cleanly, and the bounded queue degrades gracefully through a
+cellular outage and firmware OTAs with no plugin fault. Beyond the three fixes
+listed above, 2.3.0 also carries the level-based session state machine, the AC-charge
+cadence fix, and the charge-power deadband.
 
 Completes the half-finished bulk-telemetry refactor and ships it on a current
 upstream base: bulk-upload queue, the concurrent-flush and HTTP-200-vs-`status:"ok"`
@@ -52,16 +63,8 @@ test suite, CA certs + README from upstream, and a lint-clean source. Detailed i
 
 **Remaining to ship:**
 
-1. **On-vehicle validation** — the gate (unit tests can't cover real
-   `HTTP`/`OvmsMetrics`/TLS or the CA-cert handshake). Run the checklist in
-   `SPECIFICATION.md` §9: install + `tls trust reload`, reload JS engine
-   (`ABRP::started`), `abrp.info()` shows `2.3.0`, `abrp.onetime()` connects over
-   TLS, `abrp.send(1)` drains the queue over `ticker.10` with no loss.
-2. **Merge `refactor/abrp-2.3.0` → `dev`** once validation passes (clean
-   fast-forward).
-
-The upstream PR to `iternio/ovms-link` is a separate, later step (gated on
-validation).
+1. **Upstream review** — PR [#43](https://github.com/iternio/ovms-link/pull/43) is
+   open for review; on-vehicle validation (the gate) is complete.
 
 ## 2.4.0 — dissolved (features moved to 3.0.0)
 
@@ -143,7 +146,23 @@ brainstorm → spec → plan → implement cycle:
      scope) is deferred alongside. See
      `docs/research/2026-06-02-abrp-oauth2-findings.md` (open questions 1, 1a, 2).
 3. **Plan + charge-control features** (`get_latest_plan` dashboard, `get_next_charge`
-   auto-limit).
+   auto-limit) — **not started; the next unblocked headline work.** SP2b's plan
+   dashboard is gated on OAuth2, but `get_next_charge`-driven notification/auto-limit
+   does not depend on that blocker.
+
+**Also shipped:** adaptive sample cadence (collect-pressure back-off) in
+`3.0.0-alpha.3` — the sampler stretches its interval under event-loop congestion and
+recovers as collects speed up, motivated by the field-observed `ticker.1` stalls.
+
+**Community signal (RFC [#42](https://github.com/iternio/ovms-link/issues/42), as of
+2026-07-03):** early responders (`stumbaumr`, `DragonEndeavour`, `egoetz-zz`) converge
+on **plugin packaging + web onboarding (1 & 2) as must-have, delta encoding + dashboard
+(3 & 4) as welcome, plan/charge notifications (5) as low priority** — though the
+concrete "notify when ABRP charge target reached" framing lands better than generic
+plan awareness. Requests: make cadence/threshold constants user-configurable. Test
+volunteers: smart forfour ED4 / fortwo ED3, VW e-up. Recurring pain driving these:
+unreliable cellular uplink → stale SoC, which the drop-safe queue + heartbeat target
+(a BLE→phone bridge was raised but is out of scope — ovms-link is the cloud API path).
 
 ### Module split (`lib/abrp/`)
 
