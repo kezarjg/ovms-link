@@ -17,6 +17,14 @@
         <div class="col-sm-9"><input type="number" min="10" max="60" class="form-control" id="abrp-send"></div>
       </div>
       <div class="form-group">
+        <label class="control-label col-sm-3" for="abrp-heartbeat">Heartbeat interval (0=off, 30-3600 s)</label>
+        <div class="col-sm-9"><input type="number" min="0" max="3600" class="form-control" id="abrp-heartbeat"></div>
+      </div>
+      <div class="form-group">
+        <label class="control-label col-sm-3" for="abrp-deadband">Charge power deadband (0-10 kW)</label>
+        <div class="col-sm-9"><input type="number" min="0" max="10" step="0.1" class="form-control" id="abrp-deadband"></div>
+      </div>
+      <div class="form-group">
         <div class="col-sm-offset-3 col-sm-9">
           <button type="button" class="btn btn-default" id="abrp-save">Save</button>
           <button type="button" class="btn btn-default" id="abrp-validate">Validate token</button>
@@ -33,6 +41,8 @@
       var m;
       m = out.match(/sample_interval:\s*(\d+)/); if (m) $('#abrp-sample').val(m[1]);
       m = out.match(/send_interval:\s*(\d+)/); if (m) $('#abrp-send').val(m[1]);
+      m = out.match(/heartbeat_interval:\s*(\d+)/); if (m) $('#abrp-heartbeat').val(m[1]);
+      m = out.match(/charge_power_delta_kw:\s*([\d.]+)/); if (m) $('#abrp-deadband').val(m[1]);
       if (/user_token:/.test(out)) $('#abrp-token').attr('placeholder', '•••• configured');
     });
   }
@@ -42,6 +52,8 @@
     if (tok) cmds.push('config set usr abrp.user_token ' + tok);
     var s = $('#abrp-sample').val(); if (s) cmds.push('config set usr abrp.sample_interval ' + s);
     var v = $('#abrp-send').val(); if (v) cmds.push('config set usr abrp.send_interval ' + v);
+    var hb = $('#abrp-heartbeat').val(); if (hb !== '') cmds.push('config set usr abrp.heartbeat_interval ' + hb);
+    var db = $('#abrp-deadband').val(); if (db !== '') cmds.push('config set usr abrp.charge_power_delta_kw ' + db);
     var chain = $.Deferred().resolve().promise();
     cmds.forEach(function(c){ chain = chain.then(function(){ return loadcmd(c); }); });
     chain.then(function(){ $('#abrp-identity').text('Saved.'); $('#abrp-token').val(''); });

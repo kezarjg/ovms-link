@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 3.0.0-alpha.5 (unreleased)
+
+- Configurable thresholds (RFC [#42](https://github.com/iternio/ovms-link/issues/42)):
+  two more tunables are now user-settable, validated/clamped, live-reloaded on
+  `config.changed`, and exposed on the web config page — following the existing
+  `sample_interval` / `send_interval` pattern:
+  - **`usr abrp.heartbeat_interval`** (seconds) — the stale-connection heartbeat.
+    `0` disables it; other values floor to 30 and cap at 3600; default 160.
+  - **`usr abrp.charge_power_delta_kw`** (kW) — the charging-power deadband width.
+    `0` disables the deadband; fractional allowed; capped at 10; default 1.
+  - Note for the reporter: "calibration speed" from the #42 comment does not exist
+    in 3.0 — it belonged to the 2.x state-adaptive cadence / median smoothing, both
+    removed in the change-based redesign.
+
 ## 3.0.0-alpha.4 (unreleased)
 
 - Fix two 2.3.0 fixes that were lost when 3.0 forked before them (found by a
