@@ -1,0 +1,50 @@
+<div class="panel panel-primary">
+  <div class="panel-heading">ABRP Status</div>
+  <div class="panel-body">
+    <table class="table table-condensed">
+      <tbody id="abrp-status-body"><tr><td>Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+<script>
+(function(){
+  // Build each row with jQuery .text() so server/API-provided values (e.g. the
+  // ABRP account name/vehicle from oauth/me) are escaped — never concatenate
+  // untrusted strings into .html() (XSS).
+  function row(k, v){
+    return $('<tr>').append($('<th>').css('width', '40%').text(k), $('<td>').text(v));
+  }
+  function render(s){
+    var id = s.identity || {};
+    var conn = s.token_set
+      ? (id.state === 'ok' ? ('Connected as ' + id.name + ' — ' + id.vehicle)
+        : (id.state === 'error' ? ('token error: ' + (id.error || '')) : 'token set'))
+      : 'not configured';
+    var ls = s.last_send;
+    var lsTxt = ls ? ((ls.ok ? 'ok' : 'FAIL') + ' (' + (ls.code || ls.error || '') + ', ' + ls.count + ' pts, ' + ls.ts + ')') : '—';
+    var t = s.telemetry || {};
+    var $body = $('#abrp-status-body');
+    $body.empty();
+    $body.append(row('Plugin', s.version));
+    $body.append(row('Connection', conn));
+    $body.append(row('GPS time valid', s.time_valid ? 'yes' : 'no'));
+    $body.append(row('Sending', s.sending ? 'yes' : 'no'));
+    $body.append(row('Queue depth', s.queue_depth));
+    $body.append(row('Last send', lsTxt));
+    if ('soc' in t) $body.append(row('SoC', t.soc + ' %'));
+    if ('power' in t) $body.append(row('Power', t.power + ' kW'));
+    if ('speed' in t) $body.append(row('Speed', t.speed));
+    if ('is_charging' in t) $body.append(row('Charging', t.is_charging ? 'yes' : 'no'));
+  }
+  function refresh(){
+    loadcmd("script eval abrp.webStatus()").then(function(out){
+      try { render(JSON.parse(out)); }
+      catch(e){ $('#abrp-status-body').empty().append($('<tr>').append($('<td>').text('unavailable'))); }
+    });
+  }
+  var timer = window.setInterval(refresh, 5000);
+  refresh();
+  // Best-effort timer cleanup when the page is replaced (verify the exact hook on-device).
+  $('#main').one('remove', function(){ window.clearInterval(timer); });
+})();
+</script>

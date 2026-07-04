@@ -1,0 +1,51 @@
+[
+  {
+    "name": "abrp",
+    "title": "A Better Routeplanner (ABRP) Live Telemetry",
+    "version": "3.0.0-alpha.5",
+    "maintainer": "Jerry Kezar <kezarjg@gmail.com>",
+    "info": "https://github.com/kezarjg/ovms-link",
+    "group": "Electric Vehicles",
+    "description": "Streams live EV telemetry to ABRP via the Iternio Telemetry API.",
+    "prerequisites": [
+      "ovms>=3.3.004"
+    ],
+    "elements": [
+      {
+        "type": "module",
+        "path": "abrp.js",
+        "name": "abrp"
+      },
+      {
+        "type": "webrsc",
+        "path": "certdata.js",
+        "name": "abrp_certdata"
+      },
+      {
+        "type": "webpage",
+        "path": "config.htm",
+        "name": "abrp_config",
+        "label": "ABRP Config",
+        "menu": "Config",
+        "auth": "admin",
+        "page": "/usr/abrp/config"
+      },
+      {
+        "type": "webpage",
+        "path": "dashboard.htm",
+        "name": "abrp_status",
+        "label": "ABRP Status",
+        "menu": "Vehicle",
+        "auth": "none",
+        "page": "/usr/abrp/status"
+      },
+      {
+        "type": "webhook",
+        "path": "status-hook.htm",
+        "name": "abrp_status_hook",
+        "page": "status",
+        "hook": "body.post"
+      }
+    ]
+  }
+]
