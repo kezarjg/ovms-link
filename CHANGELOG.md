@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## 3.0.0-alpha.4 (unreleased)
+
+- Fix two 2.3.0 fixes that were lost when 3.0 forked before them (found by a
+  2.3.0→3.0 regression sweep; see `docs/research/2026-07-04-2.3.0-to-3.0-regression-sweep.md`):
+  - **Session state machine:** the four session events (`vehicle.on/off`,
+    `charge.start/stop`) now route through a single level-based handler
+    (`v.e.on || v.c.charging`) with an `isSampling` guard, instead of wiring
+    `charge.start/stop` straight to on/off. A `charge.stop` while the vehicle is
+    still on (unplug-and-drive) no longer kills the per-second sampler mid-drive,
+    and an on+charging overlap no longer double-subscribes it. Teardown also
+    unsubscribes `ticker.10` / `vehicle.type.set`, so `send(0)`/`send(1)` cycles no
+    longer stack subscriptions.
+  - **Charge-power deadband:** while charging, a power move smaller than
+    `CHARGE_POWER_DELTA_KW` (1 kW) vs the last queued point is no longer treated as
+    a change, killing the DC-fast-charge sub-kW point flood the change-based
+    sampler had reintroduced (0.1 kW rounding made nearly every sample a "change").
+    SoC/state changes still queue normally; the driving path is unaffected.
+- Added charge/drive overlap tests (bundle) and a deadband test (`queue.test.js`)
+  so these can't silently regress again.
+
 ## 3.0.0-alpha.3 (unreleased)
 
 - Adaptive sample cadence: the sampler now times its own `createTelemetry()` collect
