@@ -147,6 +147,91 @@ host — the module reaches this over the WAN) before touching the car.
 on-device host** — `*.github.io` is HTTP/2-over-CDN, which OVMS cannot parse (see
 the constraint at the top). Use `--out` + `kubectl cp` for the real host.)
 
+## Automated publishing (GitHub Actions)
+
+`.github/workflows/publish-plugin-repo.yml` runs the build → assemble → `kubectl cp`
+flow above automatically. It triggers on a version tag push (`v*`) — the intended
+release path, since `plugins.rev == VERSION` and re-serving without a bump is a no-op
+for the module — or a manual run from the Actions tab. It gates on `npm test`, checks
+the tag matches `VERSION`, publishes to the PVC, and verifies the served rev.
+
+Because the K3s API (`10.20.5.20:6443`) is on a private network, the job runs on a
+**self-hosted runner** inside that network. One-time setup:
+
+**1. Self-hosted runner.** Register a GitHub Actions runner (repo → Settings →
+Actions → Runners) on a box on the Slate Hill network, with labels `self-hosted` and
+`sh-k3s`, and `kubectl` on its `PATH`. (Node is provided per-job by `setup-node` from
+`.nvmrc`.)
+
+**2. Scoped ServiceAccount + RBAC** (apply to the cluster; these belong in the
+infrastructure repo alongside the rest of the `ovms-plugins` manifests). `kubectl cp`
+is `tar` piped over `exec`, so the deployer only needs `pods` read + `pods/exec` in
+namespace `ovms` — not cluster-admin:
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: ovms-plugins-deployer, namespace: ovms }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: { name: ovms-plugins-deployer, namespace: ovms }
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: ovms-plugins-deployer, namespace: ovms }
+subjects:
+  - { kind: ServiceAccount, name: ovms-plugins-deployer, namespace: ovms }
+roleRef: { kind: Role, name: ovms-plugins-deployer, apiGroup: rbac.authorization.k8s.io }
+---
+# k8s 1.24+ does not auto-create SA token secrets; request a long-lived one:
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ovms-plugins-deployer-token
+  namespace: ovms
+  annotations: { kubernetes.io/service-account.name: ovms-plugins-deployer }
+type: kubernetes.io/service-account-token
+```
+
+**3. `OVMS_KUBECONFIG` repo secret.** Build a kubeconfig that authenticates as the
+ServiceAccount above, then base64 it into the secret (the workflow `base64 -d`s it):
+
+```bash
+NS=ovms SA=ovms-plugins-deployer
+SERVER=https://10.20.5.20:6443
+TOKEN=$(kubectl -n $NS get secret ${SA}-token -o jsonpath='{.data.token}' | base64 -d)
+CA=$(kubectl -n $NS get secret ${SA}-token -o jsonpath='{.data.ca\.crt}')   # already base64
+
+cat > kubeconfig <<EOF
+apiVersion: v1
+kind: Config
+clusters:
+- name: sh-k3s
+  cluster: { server: ${SERVER}, certificate-authority-data: ${CA} }
+contexts:
+- name: deployer
+  context: { cluster: sh-k3s, namespace: ${NS}, user: deployer }
+current-context: deployer
+users:
+- name: deployer
+  user: { token: ${TOKEN} }
+EOF
+
+base64 -w0 kubeconfig   # paste output into the OVMS_KUBECONFIG repo secret, then: rm kubeconfig
+```
+
+To publish thereafter: bump `VERSION` in `lib/abrp/constants.js`, commit, then
+`git tag v<VERSION> && git push --tags` — the workflow does the rest. The manual
+`kubectl cp` flow above remains available as a fallback.
+
 ## Verify before touching a vehicle
 
 From any machine, confirm HTTP/1.1, `200`s, and that no HTTP/2 or CDN is in play:

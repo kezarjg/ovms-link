@@ -1,0 +1,100 @@
+# Builds the OVMS plugin repo tree and publishes it to the ovms-plugins nginx pod
+# on the Slate Hill K3s cluster (namespace: ovms), which serves it at
+# http://ovms.kezarnet.com/plugins/. See docs/plugin-repo-hosting.md.
+#
+# The K3s API (10.20.5.20:6443) is on a private network, so this runs on a
+# SELF-HOSTED runner inside that network. One-time setup (runner label, scoped
+# ServiceAccount, and the OVMS_KUBECONFIG secret) is documented in
+# docs/plugin-repo-hosting.md > "Automated publishing".
+#
+# Triggers: pushing a version tag (v*) — the intended release path, since
+# plugins.rev == VERSION and re-serving without a version bump is a no-op for the
+# module — or a manual run from the Actions tab.
+name: publish-plugin-repo
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# Never let two publishes race the same docroot.
+concurrency:
+  group: publish-plugin-repo
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: [self-hosted, sh-k3s]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      # npm test runs build.js first, then the full node:test suite (incl.
+      # publish.test.js) — a green gate before anything is served. No install
+      # step: the build + tests are dependency-free (0 runtime deps).
+      - name: Build bundle + run tests
+        run: npm test
+
+      - name: Read plugin version
+        id: ver
+        run: echo "version=$(node -p "require('./lib/abrp/constants').VERSION")" >> "$GITHUB_OUTPUT"
+
+      # For a tag push, keep the tag and VERSION in lockstep so plugins.rev
+      # actually advances. Skipped for manual (workflow_dispatch) runs.
+      # Untrusted-ish inputs (tag name, version) are read as quoted shell env
+      # vars, never interpolated into the shell text.
+      - name: Check tag matches VERSION
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          want="v${VERSION}"
+          if [ "$tag" != "$want" ]; then
+            echo "::error::tag ${tag} does not match v${VERSION}; bump constants.js VERSION or retag"
+            exit 1
+          fi
+
+      - name: Assemble plugin repo tree
+        run: |
+          rm -rf ./plugins
+          node publish.js --out ./plugins
+
+      - name: Write kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.OVMS_KUBECONFIG }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$KUBECONFIG_B64" | base64 -d > "$RUNNER_TEMP/kubeconfig"
+
+      # kubectl cp = tar over exec, so the scoped SA needs pods/exec in ns ovms.
+      # rm -rf first because kubectl cp merges into the target (drops files a
+      # later release removed).
+      - name: Publish to ovms-plugins docroot (PVC)
+        env:
+          KUBECONFIG: ${{ runner.temp }}/kubeconfig
+        run: |
+          set -euo pipefail
+          POD=$(kubectl get pod -n ovms -l app=ovms-plugins -o jsonpath='{.items[0].metadata.name}')
+          echo "Publishing $(cat ./plugins/plugins.rev) to pod $POD"
+          kubectl exec -n ovms "$POD" -- rm -rf /usr/share/nginx/html/plugins
+          kubectl cp ./plugins "ovms/$POD:/usr/share/nginx/html/"
+
+      # Read the served rev back FROM THE POD (reliable in-cluster; avoids
+      # LAN-hairpin flakiness on the public hostname) and assert it matches.
+      - name: Verify served revision
+        env:
+          KUBECONFIG: ${{ runner.temp }}/kubeconfig
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          POD=$(kubectl get pod -n ovms -l app=ovms-plugins -o jsonpath='{.items[0].metadata.name}')
+          served=$(kubectl exec -n ovms "$POD" -- cat /usr/share/nginx/html/plugins/plugins.rev)
+          echo "served rev: ${served}"
+          test "${served}" = "${VERSION}"
