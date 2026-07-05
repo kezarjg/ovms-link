@@ -22,6 +22,16 @@
   and removed the likewise-ineffective `build.js --defer-entry` experiment.
 - Side-load (hand-copy) delivery is unaffected and remains the documented install
   method; the plugin-install path stays blocked on the firmware stack size.
+- **metrics.js simplification** (behavior-preserving; bundle −2 KB): entries with no
+  computed value now omit their `metric` function — getOVMSMetric defaults to a
+  passthrough of `metrics[requiredMetrics[0]]` (19 near-identical functions collapsed
+  to one default). `metricMap` is built incrementally via `add()` instead of one large
+  array literal, all metric functions are hoisted to module top level, and vehicle
+  overrides are flat data (`OVERRIDES` table) instead of a nested `switch`/`if`/`forEach`.
+  Added characterization tests for the previously-untested vehicle overrides (NL/KS/
+  SUBSOL/TOYBZ4X). Trimmed the abrp DukTape compile peak by ~370 bytes — but on-device
+  measurement showed OVMS's own JS already uses ~10.6 KB of the 12 KB task stack (86%),
+  so this is marginal; the firmware stack remains the real constraint (see the bug report).
 
 ## 3.0.0-alpha.6 (unreleased)
 
