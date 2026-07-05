@@ -1,19 +1,37 @@
 # CHANGELOG
 
+## 3.0.0-alpha.7 (unreleased)
+
+- **Split into three plugins to shrink the abrp module element.** On-vehicle testing
+  showed a plugin `module` element near ~50 KB overflows OVMS's 12 KB DukTape task
+  stack while Duktape *compiles* it, aborting into a WDT reboot loop. Measured on-device
+  with `module tasks`: the working side-load peaks at 11808 / 12288 bytes — only 480
+  bytes of headroom — and the plugin-loader path has slightly less, so it crosses the
+  canary. Restructuring the JS doesn't help (un-bundling into 11 smaller units dropped
+  the peak just 224 bytes); the only robust fix is a larger firmware stack (reported
+  upstream — see `~/uploads/ovms-plugin-module-element-stack-overflow.CORRECTED.md`).
+  To reduce the pressure from the plugin side, the repo now ships three plugins:
+  - **abrp** — the telemetry bundle only (50.7 KB -> 44.9 KB, -11%).
+  - **abrpweb** — the web UI (config/dashboard/status-hook pages + backend), moved out
+    of the bundle. Reads abrp state via the new public `abrp.snapshot()` / `abrp.meUrl()`
+    and depends on the abrp plugin being installed (reports so, gracefully, if not).
+  - **abrpcerts** — a standalone installer for the CA roots abrp's TLS needs (writes
+    `/store/trustedca` + `tls trust reload`, gated by a version stamp), independent of
+    the telemetry code.
+- Reverted the alpha.6 cert-bootstrap deferral (its premise was disproven on-device)
+  and removed the likewise-ineffective `build.js --defer-entry` experiment.
+- Side-load (hand-copy) delivery is unaffected and remains the documented install
+  method; the plugin-install path stays blocked on the firmware stack size.
+
 ## 3.0.0-alpha.6 (unreleased)
 
-- **Fix plugin-install crash loop (stack overflow):** `Ev.startup()` no longer runs
-  `Certs.bootstrap()` synchronously at module load. Installed as a plugin *module
-  element*, the bundle is `require()`'d from deep inside OVMS's plugin loader;
-  running the cert bootstrap there — it nests a `require('plugin/abrp/certdata')` —
-  overflowed the DukTape load stack and put the module into a WDT reboot loop
-  (found on-vehicle during Stage-2 plugin testing, confirmed on bench serial). The
-  bootstrap is now deferred to the first `ticker.1`, where the callback runs from
-  the event loop with stack headroom, so the nested require is safe. `bootstrap()`
-  self-gates (cert-version stamp + in-progress guard), so running it on each early
-  tick until GPS time is valid is idempotent. The side-load (hand-copy) path was
-  never affected — this only bit the plugin-element load path. `overrideMetricMap()`
-  stays synchronous at startup (it does no nested require).
+- **Attempted plugin-install crash fix — SUPERSEDED in alpha.7, did not work.**
+  `Ev.startup()` was changed to defer `Certs.bootstrap()` off the synchronous
+  module-load stack, on the theory that its nested `require('plugin/abrp/certdata')`
+  caused the DukTape stack overflow seen on-vehicle (Stage-2). On-device measurement
+  later disproved this: the overflow is Duktape compiling the ~50 KB module element
+  itself against the 12 KB DukTape task stack, independent of the cert bootstrap. This
+  change is reverted in alpha.7 (cert bootstrap moved to the separate abrpcerts plugin).
 - **Fix plugin repo publishing (`publish.js`):** the assembled Pages tree was missing
   two files the on-device pluginstore requires, so the repo either wouldn't refresh
   or failed on install. Now emitted: `plugins.rev` (a single repo-revision string —

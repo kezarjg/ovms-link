@@ -12,7 +12,16 @@ function arg(name, def) {
   return i !== -1 ? process.argv[i + 1] : def
 }
 
-// Builds the plugins.json array (a single abrp plugin entry) for the given version.
+// Version of the abrp-certs plugin (the CA-root installer). Independent of the
+// abrp telemetry plugin's version; bump when the trustedca/ set changes.
+var CERTS_PLUGIN_VERSION = '1.0.0'
+
+// Builds the plugins.json array. Two plugins ship from this repo:
+//   abrp       — the telemetry bundle + web UI
+//   abrpcerts  — a small standalone installer for the CA roots abrp's TLS needs
+// (kept separate so the abrp module element stays well under the DukTape task
+// stack limit — see docs/plugin-repo-hosting.md). Plugin names must be valid JS
+// identifiers: OVMS loads each `module` element as `<name> = require(...)`.
 function buildManifest(version) {
   return [
     {
@@ -26,10 +35,36 @@ function buildManifest(version) {
       prerequisites: ['ovms>=3.3.004'],
       elements: [
         { type: 'module', path: 'abrp.js', name: 'abrp' },
-        { type: 'webrsc', path: 'certdata.js', name: 'abrp_certdata' },
-        { type: 'webpage', path: 'config.htm', name: 'abrp_config', label: 'ABRP Config', menu: 'Config', auth: 'admin', page: '/usr/abrp/config' },
-        { type: 'webpage', path: 'dashboard.htm', name: 'abrp_status', label: 'ABRP Status', menu: 'Vehicle', auth: 'none', page: '/usr/abrp/status' },
-        { type: 'webhook', path: 'status-hook.htm', name: 'abrp_status_hook', page: 'status', hook: 'body.post' },
+      ],
+    },
+    {
+      name: 'abrpweb',
+      title: 'ABRP Web UI',
+      version: version,
+      maintainer: 'Jerry Kezar <kezarjg@gmail.com>',
+      info: 'https://github.com/kezarjg/ovms-link',
+      group: 'Electric Vehicles',
+      description: 'Config + status web pages for the ABRP plugin. Requires the abrp plugin.',
+      prerequisites: ['ovms>=3.3.004'],
+      elements: [
+        { type: 'module', path: 'abrpweb.js', name: 'abrpweb' },
+        { type: 'webpage', path: 'config.htm', name: 'abrpweb_config', label: 'ABRP Config', menu: 'Config', auth: 'admin', page: '/usr/abrp/config' },
+        { type: 'webpage', path: 'dashboard.htm', name: 'abrpweb_status', label: 'ABRP Status', menu: 'Vehicle', auth: 'none', page: '/usr/abrp/status' },
+        { type: 'webhook', path: 'status-hook.htm', name: 'abrpweb_status_hook', page: 'status', hook: 'body.post' },
+      ],
+    },
+    {
+      name: 'abrpcerts',
+      title: 'ABRP CA Certificate Installer',
+      version: CERTS_PLUGIN_VERSION,
+      maintainer: 'Jerry Kezar <kezarjg@gmail.com>',
+      info: 'https://github.com/kezarjg/ovms-link',
+      group: 'Electric Vehicles',
+      description: 'Installs the CA roots the ABRP plugin needs for its TLS connection to api.iternio.com.',
+      prerequisites: ['ovms>=3.3.004'],
+      elements: [
+        { type: 'module', path: 'abrpcerts.js', name: 'abrpcerts' },
+        { type: 'webrsc', path: 'certdata.js', name: 'abrpcerts_certdata' },
       ],
     },
   ]
@@ -61,49 +96,67 @@ function renderCertData(entries) {
   )
 }
 
+// Writes a single manifest element's file into its plugin dir, resolving the
+// content by filename: the abrp bundle, the abrpcerts installer, generated CA
+// cert data, or a web .htm asset. Returns the written path.
+function writeElement(pluginDir, el, src) {
+  var dest = path.join(pluginDir, el.path)
+  if (el.path === 'abrp.js') {
+    fs.copyFileSync(src.bundlePath, dest)
+  } else if (el.path === 'abrpcerts.js') {
+    fs.copyFileSync(src.certsPluginPath, dest)
+  } else if (el.path === 'abrpweb.js') {
+    fs.copyFileSync(src.webPluginPath, dest)
+  } else if (el.path === 'certdata.js') {
+    fs.writeFileSync(dest, renderCertData(buildCertData(src.certDir)))
+  } else if (/\.htm$/.test(el.path)) {
+    fs.copyFileSync(path.join(src.webDir, el.path), dest)
+  } else {
+    throw new Error('publish.js: unknown element ' + el.path)
+  }
+  return dest
+}
+
 // Writes the Pages tree into outDir. The on-device OVMS pluginstore expects:
 //   plugins.rev  — a single repo revision string; it only refreshes when this
-//                  changes, so we emit the plugin version (advances per release).
+//                  changes, so we emit the abrp version (advances per release).
 //   plugins.json — the repo index (an array of plugin summary objects).
-//   abrp/abrp.json — the per-plugin manifest OVMS fetches on install: the SINGLE
-//                  plugin object (plugins.json[0]), not the array. Missing this,
-//                  OVMS saved the 404 HTML and failed with "could not parse metadata".
-//   abrp/abrp.js — the bundle (module element).
-//   abrp/certdata.js — CA roots from certDir (webrsc element).
-//   abrp/*.htm   — the web assets from webDir, one per .htm manifest element.
-// Returns the written paths.
-function assemblePages(outDir, bundlePath, version, certDir, webDir) {
+//   <name>/<name>.json — the per-plugin manifest OVMS fetches on install: the
+//                  SINGLE plugin object (not the array). Missing this, OVMS saved
+//                  the 404 HTML and failed with "could not parse metadata".
+//   <name>/<element> — one file per element (bundle / installer / certdata / .htm).
+// Returns { revPath, manifestPath, plugins: { <name>: { dir, files } } }.
+function assemblePages(outDir, bundlePath, version, certDir, webDir, certsPluginPath, webPluginPath) {
   certDir = certDir || path.resolve(__dirname, 'trustedca')
   webDir = webDir || path.resolve(__dirname, 'web')
+  certsPluginPath = certsPluginPath || path.resolve(__dirname, 'abrpcerts.js')
+  webPluginPath = webPluginPath || path.resolve(__dirname, 'abrpweb.js')
   var manifest = buildManifest(version)
-  var pluginDir = path.join(outDir, 'abrp')
   var revPath = path.join(outDir, 'plugins.rev')
   var manifestPath = path.join(outDir, 'plugins.json')
-  var pluginJsonOut = path.join(pluginDir, 'abrp.json')
-  var moduleOut = path.join(pluginDir, 'abrp.js')
-  var certDataOut = path.join(pluginDir, 'certdata.js')
-  fs.mkdirSync(pluginDir, { recursive: true })
+  fs.mkdirSync(outDir, { recursive: true })
   fs.writeFileSync(revPath, version + '\n')
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n')
-  fs.writeFileSync(pluginJsonOut, JSON.stringify(manifest[0], null, 2) + '\n')
-  fs.copyFileSync(bundlePath, moduleOut)
-  fs.writeFileSync(certDataOut, renderCertData(buildCertData(certDir)))
-  var webOut = []
-  manifest[0].elements.forEach(function (el) {
-    if (/\.htm$/.test(el.path)) {
-      var dest = path.join(pluginDir, el.path)
-      fs.copyFileSync(path.join(webDir, el.path), dest)
-      webOut.push(dest)
-    }
-  })
-  return {
-    revPath: revPath,
-    manifestPath: manifestPath,
-    pluginJsonOut: pluginJsonOut,
-    moduleOut: moduleOut,
-    certDataOut: certDataOut,
-    webOut: webOut,
+  var src = {
+    bundlePath: bundlePath,
+    certsPluginPath: certsPluginPath,
+    webPluginPath: webPluginPath,
+    certDir: certDir,
+    webDir: webDir,
   }
+  var plugins = {}
+  manifest.forEach(function (p) {
+    var dir = path.join(outDir, p.name)
+    fs.mkdirSync(dir, { recursive: true })
+    var jsonOut = path.join(dir, p.name + '.json')
+    fs.writeFileSync(jsonOut, JSON.stringify(p, null, 2) + '\n')
+    var files = [jsonOut]
+    p.elements.forEach(function (el) {
+      files.push(writeElement(dir, el, src))
+    })
+    plugins[p.name] = { dir: dir, files: files }
+  })
+  return { revPath: revPath, manifestPath: manifestPath, plugins: plugins }
 }
 
 function run(args, cwd) {
@@ -148,6 +201,7 @@ function publishToGhPages(repoDir, stageDir, message) {
 module.exports = {
   buildManifest: buildManifest,
   assemblePages: assemblePages,
+  writeElement: writeElement,
   publishToGhPages: publishToGhPages,
   buildCertData: buildCertData,
   renderCertData: renderCertData,
@@ -170,7 +224,7 @@ if (require.main === module) {
     console.log('publish.js: published abrp ' + C.VERSION + ' to origin/gh-pages')
   } else if (out) {
     var res = assemblePages(out, bundle, C.VERSION)
-    console.log('publish.js: wrote ' + res.revPath + ', ' + res.manifestPath + ', ' + res.pluginJsonOut + ', ' + res.moduleOut + ', and ' + res.certDataOut + ' (version ' + C.VERSION + ')')
+    console.log('publish.js: wrote ' + res.manifestPath + ' + plugin trees [' + Object.keys(res.plugins).join(', ') + '] (abrp ' + C.VERSION + ')')
   } else {
     console.error('publish.js: expected --out <dir> or --publish')
     process.exit(1)

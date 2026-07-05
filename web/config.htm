@@ -60,9 +60,9 @@
   });
   $('#abrp-validate').on('click', function(){
     $('#abrp-identity').text('Checking…');
-    loadcmd("script eval abrp.webIdentityRefresh()").then(function(){
+    loadcmd("script eval abrpweb.webIdentityRefresh()").then(function(){
       window.setTimeout(function(){
-        loadcmd("script eval abrp.webStatus()").then(function(out){
+        loadcmd("script eval abrpweb.webStatus()").then(function(out){
           try {
             var st = JSON.parse(out), id = st.identity || {};
             if (id.state === 'ok') $('#abrp-identity').text('Connected as ' + id.name + ' — ' + id.vehicle);

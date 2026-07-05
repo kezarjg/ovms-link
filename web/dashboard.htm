@@ -37,7 +37,7 @@
     if ('is_charging' in t) $body.append(row('Charging', t.is_charging ? 'yes' : 'no'));
   }
   function refresh(){
-    loadcmd("script eval abrp.webStatus()").then(function(out){
+    loadcmd("script eval abrpweb.webStatus()").then(function(out){
       try { render(JSON.parse(out)); }
       catch(e){ $('#abrp-status-body').empty().append($('<tr>').append($('<td>').text('unavailable'))); }
     });

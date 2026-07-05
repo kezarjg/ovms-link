@@ -12,20 +12,32 @@ const {
   renderCertData,
 } = require('../publish')
 
-test('buildManifest returns one abrp entry with the given version', () => {
+test('buildManifest returns abrp + abrpweb + abrpcerts; abrp is module-only', () => {
   const m = buildManifest('9.9.9')
   assert.strictEqual(Array.isArray(m), true)
-  assert.strictEqual(m.length, 1)
-  const e = m[0]
-  assert.strictEqual(e.name, 'abrp')
-  assert.strictEqual(e.version, '9.9.9')
-  assert.ok(e.prerequisites.includes('ovms>=3.3.004'))
-  assert.deepStrictEqual(e.elements, [
-    { type: 'module', path: 'abrp.js', name: 'abrp' },
-    { type: 'webrsc', path: 'certdata.js', name: 'abrp_certdata' },
-    { type: 'webpage', path: 'config.htm', name: 'abrp_config', label: 'ABRP Config', menu: 'Config', auth: 'admin', page: '/usr/abrp/config' },
-    { type: 'webpage', path: 'dashboard.htm', name: 'abrp_status', label: 'ABRP Status', menu: 'Vehicle', auth: 'none', page: '/usr/abrp/status' },
-    { type: 'webhook', path: 'status-hook.htm', name: 'abrp_status_hook', page: 'status', hook: 'body.post' },
+  assert.strictEqual(m.length, 3)
+  const byName = {}
+  m.forEach((p) => {
+    byName[p.name] = p
+    assert.ok(/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(p.name)) // valid JS identifier (module global)
+  })
+
+  // abrp: just the telemetry bundle now — no web pages, no certdata
+  assert.strictEqual(byName.abrp.version, '9.9.9')
+  assert.deepStrictEqual(byName.abrp.elements, [{ type: 'module', path: 'abrp.js', name: 'abrp' }])
+
+  // abrpweb: the module backend + the three pages
+  assert.deepStrictEqual(byName.abrpweb.elements, [
+    { type: 'module', path: 'abrpweb.js', name: 'abrpweb' },
+    { type: 'webpage', path: 'config.htm', name: 'abrpweb_config', label: 'ABRP Config', menu: 'Config', auth: 'admin', page: '/usr/abrp/config' },
+    { type: 'webpage', path: 'dashboard.htm', name: 'abrpweb_status', label: 'ABRP Status', menu: 'Vehicle', auth: 'none', page: '/usr/abrp/status' },
+    { type: 'webhook', path: 'status-hook.htm', name: 'abrpweb_status_hook', page: 'status', hook: 'body.post' },
+  ])
+
+  // abrpcerts: installer + cert data
+  assert.deepStrictEqual(byName.abrpcerts.elements, [
+    { type: 'module', path: 'abrpcerts.js', name: 'abrpcerts' },
+    { type: 'webrsc', path: 'certdata.js', name: 'abrpcerts_certdata' },
   ])
 })
 
@@ -154,34 +166,47 @@ test('renderCertData emits a Duktape-safe module exporting the entries', () => {
   assert.deepStrictEqual(require(out), entries)
 })
 
-test('certdata element is NOT a module (avoids clobbering the abrp global on auto-load)', () => {
-  const cd = buildManifest('9.9.9')[0].elements.find((e) => e.path === 'certdata.js')
+test('certdata element (in abrpcerts) is a webrsc, not a module (avoids clobbering its global)', () => {
+  const certs = buildManifest('9.9.9').find((p) => p.name === 'abrpcerts')
+  const cd = certs.elements.find((e) => e.path === 'certdata.js')
   assert.ok(cd)
   assert.notStrictEqual(cd.type, 'module')
 })
 
-test('assemblePages also writes abrp/certdata.js', () => {
+test('assemblePages writes the abrpcerts plugin (installer module + certdata), not under abrp', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pages-cd-'))
   const bundle = path.join(dir, 'src-abrp.js')
   fs.writeFileSync(bundle, '// fake bundle\nmodule.exports = {}\n')
   const certDir = path.join(dir, 'certs')
   fs.mkdirSync(certDir)
   fs.writeFileSync(path.join(certDir, 'x.crt'), 'PEM-X\n')
+  const certsPlugin = path.join(dir, 'src-abrpcerts.js')
+  fs.writeFileSync(certsPlugin, '// fake installer\nmodule.exports = {}\n')
 
-  assemblePages(path.join(dir, 'out'), bundle, '9.9.9', certDir)
+  assemblePages(path.join(dir, 'out'), bundle, '9.9.9', certDir, undefined, certsPlugin)
 
-  const certdata = require(path.join(dir, 'out', 'abrp', 'certdata.js'))
+  // cert data now lives under the abrpcerts plugin
+  const certdata = require(path.join(dir, 'out', 'abrpcerts', 'certdata.js'))
   assert.deepStrictEqual(certdata, [{ file: 'x.crt', pem: 'PEM-X\n' }])
+  // installer module element shipped
+  assert.strictEqual(
+    fs.readFileSync(path.join(dir, 'out', 'abrpcerts', 'abrpcerts.js'), 'utf8'),
+    '// fake installer\nmodule.exports = {}\n'
+  )
+  // per-plugin manifest present
+  assert.ok(fs.existsSync(path.join(dir, 'out', 'abrpcerts', 'abrpcerts.json')))
+  // and abrp no longer has certdata
+  assert.ok(!fs.existsSync(path.join(dir, 'out', 'abrp', 'certdata.js')))
 })
 
-test('manifest web elements are pages/hooks, never module (avoids clobbering abrp)', () => {
-  const els = buildManifest('9.9.9')[0].elements
-  els.filter((e) => /\.htm$/.test(e.path)).forEach((e) => {
+test('the abrpweb page/hook elements are never module (avoids clobbering the abrpweb global)', () => {
+  const web = buildManifest('9.9.9').find((p) => p.name === 'abrpweb')
+  web.elements.filter((e) => /\.htm$/.test(e.path)).forEach((e) => {
     assert.notStrictEqual(e.type, 'module')
   })
 })
 
-test('assemblePages copies the web/*.htm assets into abrp/', () => {
+test('assemblePages copies the web/*.htm assets into abrpweb/, not abrp/', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pages-web-'))
   const bundle = path.join(dir, 'src-abrp.js')
   fs.writeFileSync(bundle, '// fake bundle\nmodule.exports = {}\n')
@@ -191,11 +216,16 @@ test('assemblePages copies the web/*.htm assets into abrp/', () => {
   fs.writeFileSync(path.join(webDir, 'config.htm'), '<i>config</i>\n')
   fs.writeFileSync(path.join(webDir, 'dashboard.htm'), '<i>dash</i>\n')
   fs.writeFileSync(path.join(webDir, 'status-hook.htm'), '<i>hook</i>\n')
+  const webPlugin = path.join(dir, 'src-abrpweb.js')
+  fs.writeFileSync(webPlugin, '// fake web backend\nmodule.exports = {}\n')
 
-  assemblePages(path.join(dir, 'out'), bundle, '9.9.9', certDir, webDir)
+  assemblePages(path.join(dir, 'out'), bundle, '9.9.9', certDir, webDir, undefined, webPlugin)
 
-  const outAbrp = path.join(dir, 'out', 'abrp')
-  assert.ok(fs.existsSync(path.join(outAbrp, 'config.htm')))
-  assert.ok(fs.existsSync(path.join(outAbrp, 'dashboard.htm')))
-  assert.ok(fs.existsSync(path.join(outAbrp, 'status-hook.htm')))
+  const outWeb = path.join(dir, 'out', 'abrpweb')
+  assert.ok(fs.existsSync(path.join(outWeb, 'abrpweb.js')))
+  assert.ok(fs.existsSync(path.join(outWeb, 'config.htm')))
+  assert.ok(fs.existsSync(path.join(outWeb, 'dashboard.htm')))
+  assert.ok(fs.existsSync(path.join(outWeb, 'status-hook.htm')))
+  // pages no longer under abrp/
+  assert.ok(!fs.existsSync(path.join(dir, 'out', 'abrp', 'config.htm')))
 })
