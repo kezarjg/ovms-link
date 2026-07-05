@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## 3.0.0-alpha.6 (unreleased)
+
+- **Fix plugin-install crash loop (stack overflow):** `Ev.startup()` no longer runs
+  `Certs.bootstrap()` synchronously at module load. Installed as a plugin *module
+  element*, the bundle is `require()`'d from deep inside OVMS's plugin loader;
+  running the cert bootstrap there — it nests a `require('plugin/abrp/certdata')` —
+  overflowed the DukTape load stack and put the module into a WDT reboot loop
+  (found on-vehicle during Stage-2 plugin testing, confirmed on bench serial). The
+  bootstrap is now deferred to the first `ticker.1`, where the callback runs from
+  the event loop with stack headroom, so the nested require is safe. `bootstrap()`
+  self-gates (cert-version stamp + in-progress guard), so running it on each early
+  tick until GPS time is valid is idempotent. The side-load (hand-copy) path was
+  never affected — this only bit the plugin-element load path. `overrideMetricMap()`
+  stays synchronous at startup (it does no nested require).
+- **Fix plugin repo publishing (`publish.js`):** the assembled Pages tree was missing
+  two files the on-device pluginstore requires, so the repo either wouldn't refresh
+  or failed on install. Now emitted: `plugins.rev` (a single repo-revision string —
+  OVMS only re-reads `plugins.json` when it changes; we use the plugin version so it
+  advances every release) and `abrp/abrp.json` (the per-plugin manifest OVMS fetches
+  on install — the single plugin object, i.e. `plugins.json[0]`; its absence made
+  OVMS save the 404 HTML and fail with "could not parse metadata"). Matches the
+  openvehicles reference repo layout. These were hand-patched onto the test server
+  during Stage-2; now they're generated.
+
 ## 3.0.0-alpha.5 (unreleased)
 
 - Configurable thresholds (RFC [#42](https://github.com/iternio/ovms-link/issues/42)):

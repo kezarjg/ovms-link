@@ -61,29 +61,49 @@ function renderCertData(entries) {
   )
 }
 
-// Writes the Pages tree into outDir: plugins.json (the manifest), abrp/abrp.js
-// (the bundle), abrp/certdata.js (CA roots from certDir), and the web assets
-// (abrp/*.htm from webDir, one per .htm manifest element). Returns the paths.
+// Writes the Pages tree into outDir. The on-device OVMS pluginstore expects:
+//   plugins.rev  — a single repo revision string; it only refreshes when this
+//                  changes, so we emit the plugin version (advances per release).
+//   plugins.json — the repo index (an array of plugin summary objects).
+//   abrp/abrp.json — the per-plugin manifest OVMS fetches on install: the SINGLE
+//                  plugin object (plugins.json[0]), not the array. Missing this,
+//                  OVMS saved the 404 HTML and failed with "could not parse metadata".
+//   abrp/abrp.js — the bundle (module element).
+//   abrp/certdata.js — CA roots from certDir (webrsc element).
+//   abrp/*.htm   — the web assets from webDir, one per .htm manifest element.
+// Returns the written paths.
 function assemblePages(outDir, bundlePath, version, certDir, webDir) {
   certDir = certDir || path.resolve(__dirname, 'trustedca')
   webDir = webDir || path.resolve(__dirname, 'web')
+  var manifest = buildManifest(version)
   var pluginDir = path.join(outDir, 'abrp')
+  var revPath = path.join(outDir, 'plugins.rev')
   var manifestPath = path.join(outDir, 'plugins.json')
+  var pluginJsonOut = path.join(pluginDir, 'abrp.json')
   var moduleOut = path.join(pluginDir, 'abrp.js')
   var certDataOut = path.join(pluginDir, 'certdata.js')
   fs.mkdirSync(pluginDir, { recursive: true })
-  fs.writeFileSync(manifestPath, JSON.stringify(buildManifest(version), null, 2) + '\n')
+  fs.writeFileSync(revPath, version + '\n')
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n')
+  fs.writeFileSync(pluginJsonOut, JSON.stringify(manifest[0], null, 2) + '\n')
   fs.copyFileSync(bundlePath, moduleOut)
   fs.writeFileSync(certDataOut, renderCertData(buildCertData(certDir)))
   var webOut = []
-  buildManifest(version)[0].elements.forEach(function (el) {
+  manifest[0].elements.forEach(function (el) {
     if (/\.htm$/.test(el.path)) {
       var dest = path.join(pluginDir, el.path)
       fs.copyFileSync(path.join(webDir, el.path), dest)
       webOut.push(dest)
     }
   })
-  return { manifestPath: manifestPath, moduleOut: moduleOut, certDataOut: certDataOut, webOut: webOut }
+  return {
+    revPath: revPath,
+    manifestPath: manifestPath,
+    pluginJsonOut: pluginJsonOut,
+    moduleOut: moduleOut,
+    certDataOut: certDataOut,
+    webOut: webOut,
+  }
 }
 
 function run(args, cwd) {
@@ -150,7 +170,7 @@ if (require.main === module) {
     console.log('publish.js: published abrp ' + C.VERSION + ' to origin/gh-pages')
   } else if (out) {
     var res = assemblePages(out, bundle, C.VERSION)
-    console.log('publish.js: wrote ' + res.manifestPath + ', ' + res.moduleOut + ', and ' + res.certDataOut + ' (version ' + C.VERSION + ')')
+    console.log('publish.js: wrote ' + res.revPath + ', ' + res.manifestPath + ', ' + res.pluginJsonOut + ', ' + res.moduleOut + ', and ' + res.certDataOut + ' (version ' + C.VERSION + ')')
   } else {
     console.error('publish.js: expected --out <dir> or --publish')
     process.exit(1)

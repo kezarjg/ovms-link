@@ -46,6 +46,32 @@ test('assemblePages writes plugins.json + abrp/abrp.js with the bundle bytes', (
   assert.strictEqual(copied, '// fake bundle\nmodule.exports = {}\n')
 })
 
+test('assemblePages writes plugins.rev so OVMS detects repo changes', () => {
+  // Without plugins.rev the on-device pluginstore can't tell the repo changed and
+  // refuses to refresh (Stage-2 blocker). It's a single revision string; we use
+  // the plugin version so it advances on every release.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pages-rev-'))
+  const bundle = path.join(dir, 'src-abrp.js')
+  fs.writeFileSync(bundle, '// fake bundle\n')
+  assemblePages(path.join(dir, 'out'), bundle, '9.9.9')
+
+  const rev = fs.readFileSync(path.join(dir, 'out', 'plugins.rev'), 'utf8')
+  assert.strictEqual(rev.trim(), '9.9.9')
+})
+
+test('assemblePages writes abrp/abrp.json as the single plugin manifest entry', () => {
+  // OVMS fetches <base>/<name>/<name>.json on install and expects the single
+  // plugin object (NOT the plugins.json array). Its absence made OVMS save the
+  // 404 HTML and fail with "could not parse metadata" (Stage-2 crash lead-up).
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pages-pj-'))
+  const bundle = path.join(dir, 'src-abrp.js')
+  fs.writeFileSync(bundle, '// fake bundle\n')
+  assemblePages(path.join(dir, 'out'), bundle, '9.9.9')
+
+  const perPlugin = JSON.parse(fs.readFileSync(path.join(dir, 'out', 'abrp', 'abrp.json'), 'utf8'))
+  assert.deepStrictEqual(perPlugin, buildManifest('9.9.9')[0])
+})
+
 function git(args, cwd) {
   return execFileSync('git', args, { cwd: cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString()
 }
