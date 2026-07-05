@@ -41,7 +41,7 @@ later hardening step.
 
 ## URL layout
 
-Choose a base URL, e.g. `http://ovms.kezarnet.com/ovms-plugins/`. Serve the
+Choose a base URL, e.g. `http://ovms.kezarnet.com/plugins/`. Serve the
 `publish.js` output tree verbatim under it so these all resolve with `HTTP/1.1 200`:
 
 ```
@@ -90,10 +90,10 @@ server {
     listen 80;
     server_name ovms.kezarnet.com;
 
-    location /ovms-plugins/ {
-        alias /var/www/ovms-plugins/;   # trailing slashes matter
+    location /plugins/ {
+        alias /var/www/plugins/;   # trailing slashes matter
         autoindex off;
-        location = /ovms-plugins/plugins.rev {
+        location = /plugins/plugins.rev {
             add_header Cache-Control "no-cache";
         }
     }
@@ -103,8 +103,8 @@ server {
 ### Apache (mirrors the openvehicles setup)
 
 ```apache
-Alias /ovms-plugins /var/www/ovms-plugins
-<Directory /var/www/ovms-plugins>
+Alias /plugins /var/www/plugins
+<Directory /var/www/plugins>
     Require all granted
     Options -Indexes
 </Directory>
@@ -114,30 +114,47 @@ Alias /ovms-plugins /var/www/ovms-plugins
 
 ## Deploy
 
-Build the bundle, assemble the tree, and sync it to the docroot:
+The live host is an **nginx pod on the Slate Hill K3s cluster** (namespace `ovms`),
+fronted by Traefik on plain HTTP/1.1 at `http://ovms.kezarnet.com/plugins/`. The
+plugin tree is a build artifact — it is **not** committed anywhere; you push it
+into the pod's docroot with `kubectl cp` (the K3s equivalent of rsync-to-docroot).
+
+Build the bundle, assemble the tree, and copy it in. The `--out` directory name
+becomes the URL path segment, so call it `plugins`:
 
 ```bash
-npm run build
-node publish.js --out ./ovms-plugins
-rsync -av ./ovms-plugins/  <user>@ovms.kezarnet.com:/var/www/ovms-plugins/
+npm run build && node publish.js --out /tmp/plugins
+POD=$(kubectl get pod -n ovms -l app=ovms-plugins --context sh-k3s -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n ovms "$POD" --context sh-k3s -- rm -rf /usr/share/nginx/html/plugins
+kubectl cp /tmp/plugins "ovms/$POD:/usr/share/nginx/html/" --context sh-k3s
 ```
 
-Re-run all three on each new version. `plugins.rev` bumps automatically with the
-plugin version, so OVMS picks up the change on its next refresh.
+Re-run on each new version. `plugins.rev` bumps automatically with the plugin
+version, so OVMS picks up the change on its next refresh. The `rm -rf` before the
+copy clears any files that a later release dropped.
+
+Then run the [Verify](#verify-before-touching-a-vehicle) curls (from an off-network
+host — the module reaches this over the WAN) before touching the car.
+
+> **Host-side setup lives in the infrastructure repo**, not here: the nginx
+> Deployment, PVC, Traefik IngressRoute, and the `web`-entrypoint redirect change
+> that lets `/plugins/` be served in plain HTTP/1.1 are under
+> `slate-hill/configs/k3s/ovms-server/ovms-plugins/` (see its `README.md`). This
+> section only covers pushing new plugin content to an already-running host.
 
 (`npm run release` / `node publish.js --publish` instead pushes the tree to a
-`gh-pages` branch — useful as a build artifact, but **gh-pages is not a valid
-on-device host** per the HTTP/2 constraint above. Use it only for staging the files,
-then serve them from a plain HTTP/1.1 origin.)
+`gh-pages` branch. That is fine as a build artifact, but **gh-pages is not a valid
+on-device host** — `*.github.io` is HTTP/2-over-CDN, which OVMS cannot parse (see
+the constraint at the top). Use `--out` + `kubectl cp` for the real host.)
 
 ## Verify before touching a vehicle
 
 From any machine, confirm HTTP/1.1, `200`s, and that no HTTP/2 or CDN is in play:
 
 ```bash
-curl -s -D - -o /dev/null http://ovms.kezarnet.com/ovms-plugins/plugins.json
-curl -s -D - -o /dev/null http://ovms.kezarnet.com/ovms-plugins/plugins.rev
-curl -s http://ovms.kezarnet.com/ovms-plugins/abrp/abrp.json | head -3
+curl -s -D - -o /dev/null http://ovms.kezarnet.com/plugins/plugins.json
+curl -s -D - -o /dev/null http://ovms.kezarnet.com/plugins/plugins.rev
+curl -s http://ovms.kezarnet.com/plugins/abrp/abrp.json | head -3
 ```
 
 Every response's first status line must be `HTTP/1.1 200` (not `HTTP/2`), the
@@ -149,7 +166,7 @@ Every response's first status line must be `HTTP/1.1 200` (not `HTTP/2`), the
 Only after the `curl` checks pass:
 
 ```text
-plugin repo install abrp http://ovms.kezarnet.com/ovms-plugins/
+plugin repo install abrp http://ovms.kezarnet.com/plugins/
 plugin install abrp
 module reset      # module elements only load on a full reboot, not `script reload`
 ```
