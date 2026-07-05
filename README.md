@@ -23,26 +23,11 @@ based on live information.
 3. In the settings for the new vehicle, click on the **Live data** button to
    generate a generic token. Keep a record of this token
 
-### Install via the OVMS plugin store (recommended)
+### Install manually (recommended today)
 
-1. In the OVMS web console, go to **Tools** -> **Shell**.
-2. Register this plugin repository and install:
-
-   ```text
-   plugin repo install abrp https://kezarjg.github.io/ovms-link/
-   plugin install abrp
-   ```
-
-   Later, `plugin update` upgrades to new versions.
-
-*No `ovmsmain.js` step is needed — the plugin's module element auto-loads at each
-JS-engine start.*
-
-### Install manually (fallback)
-
-If you can't use the plugin store, build and hand-copy the single-file bundle. This
-requires [Node.js](https://nodejs.org) (the bundler is dependency-free, so **no
-`npm install` is needed**):
+Build and hand-copy the single-file bundle. This requires
+[Node.js](https://nodejs.org) (the bundler is dependency-free, so **no `npm install`
+is needed**):
 
 ```bash
 npm run build      # emits dist/abrp.js
@@ -53,11 +38,33 @@ npm run build      # emits dist/abrp.js
 2. Use `/store/scripts/ovmsmain.js` for **Path**, **Load**, paste the content of the
    repository's `ovmsmain.js`, **Save**.
 
-**Required for both install methods:** the plugin's runtime TLS connection to
-`api.iternio.com` needs the CA certificates below. (The plugin files are served over
-GitHub Pages, whose certificate OVMS already trusts, so the *install* itself needs no
-cert setup — only the runtime connection to `api.iternio.com` needs these extra
-roots.) Automatic cert install is planned for a later release.
+### Install via the OVMS plugin store (self-hosted repo)
+
+The plugin-store install requires the plugin repository to be served from a **plain
+HTTP/1.1 host**. GitHub Pages does **not** work — its HTTP/2 / CDN responses are
+rejected by OVMS's HTTP client (`HTTP response invalid`). Once you host the repo
+(see [docs/plugin-repo-hosting.md](docs/plugin-repo-hosting.md) for the requirements;
+`publish.js` / `npm run release` assembles the tree):
+
+1. In the OVMS web console, go to **Tools** -> **Shell**.
+2. Register the repository and install (substitute your host):
+
+   ```text
+   plugin repo install abrp http://<your-plugin-host>/ovms-plugins/
+   plugin install abrp
+   module reset
+   ```
+
+   Later, `plugin update` upgrades to new versions.
+
+*No `ovmsmain.js` step is needed for this method — the plugin's module element
+auto-loads at each JS-engine start. Note module elements only load on a full reboot
+(`module reset`), not `script reload`.*
+
+**Runtime TLS certificates.** The plugin's live connection to `api.iternio.com` needs
+extra CA roots. The **plugin-store** install ships these as a `certdata` element and
+writes them to `/store/trustedca` automatically on first run (gated by a version
+stamp). For the **manual** install, add them once yourself using the steps below.
 
 ### Install or update the trusted root CA in OVMS
 
