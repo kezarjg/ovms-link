@@ -3,8 +3,10 @@
 # http://ovms.kezarnet.com/plugins/. See docs/plugin-repo-hosting.md.
 #
 # The K3s API (10.20.5.20:6443) is on a private network, so this runs on a
-# SELF-HOSTED runner inside that network. One-time setup (runner label, scoped
-# ServiceAccount, and the OVMS_KUBECONFIG secret) is documented in
+# SELF-HOSTED runner inside that network — the `ovms-link-publish` ARC scale set on
+# the Slate Hill K3s cluster (managed in the infrastructure repo:
+# slate-hill/configs/k3s/arc/ovms-link-runner-set-values.yaml). Its image bakes in
+# kubectl; the scoped ServiceAccount + OVMS_KUBECONFIG secret setup is documented in
 # docs/plugin-repo-hosting.md > "Automated publishing".
 #
 # Triggers: pushing a version tag (v*) — the intended release path, since
@@ -25,7 +27,7 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: [self-hosted, sh-k3s]
+    runs-on: ovms-link-publish
     steps:
       - uses: actions/checkout@v4
 

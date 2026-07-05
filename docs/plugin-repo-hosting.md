@@ -158,15 +158,17 @@ the tag matches `VERSION`, publishes to the PVC, and verifies the served rev.
 Because the K3s API (`10.20.5.20:6443`) is on a private network, the job runs on a
 **self-hosted runner** inside that network. One-time setup:
 
-**1. Self-hosted runner.** Register a GitHub Actions runner (repo → Settings →
-Actions → Runners) on a box on the Slate Hill network, with labels `self-hosted` and
-`sh-k3s`, and `kubectl` on its `PATH`. (Node is provided per-job by `setup-node` from
-`.nvmrc`.)
+**1. Self-hosted runner.** Provided by the `ovms-link-publish` **ARC** scale set on
+the Slate Hill K3s cluster (`runs-on: ovms-link-publish`), managed in the
+infrastructure repo at `slate-hill/configs/k3s/arc/ovms-link-runner-set-values.yaml`.
+Its image bakes in `kubectl`; Node is provided per-job by `setup-node` from `.nvmrc`.
+(One-time: install the shared `ovms-modern-arc` GitHub App on this repo.)
 
-**2. Scoped ServiceAccount + RBAC** (apply to the cluster; these belong in the
-infrastructure repo alongside the rest of the `ovms-plugins` manifests). `kubectl cp`
+**2. Scoped ServiceAccount + RBAC.** Now applied and version-controlled in the
+infrastructure repo at `slate-hill/configs/k3s/ovms-server/ovms-plugins/publish-rbac.yaml`
+(the live SA is named **`plugin-publisher`**, not the placeholder below). `kubectl cp`
 is `tar` piped over `exec`, so the deployer only needs `pods` read + `pods/exec` in
-namespace `ovms` — not cluster-admin:
+namespace `ovms` — not cluster-admin. The shape:
 
 ```yaml
 apiVersion: v1

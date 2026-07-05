@@ -1,0 +1,36 @@
+# Builds the self-hosted runner image used by the `ovms-link-publish` ARC scale set
+# (publish-plugin-repo.yml runs on it). Runs on a GitHub-hosted runner — ovms-link is
+# public, so hosted minutes are free and there is no chicken-and-egg with the
+# self-hosted runner this image backs.
+#
+# First run creates the ghcr package `ovms-link-runner` as PRIVATE; make it PUBLIC
+# once (repo → Packages → ovms-link-runner → Package settings → Change visibility) so
+# the ARC runner pods can pull it without an imagePullSecret.
+name: runner-image
+
+on:
+  push:
+    paths:
+      - 'ci/runner/**'
+      - '.github/workflows/runner-image.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ci/runner
+          push: true
+          tags: ghcr.io/kezarjg/ovms-link-runner:latest

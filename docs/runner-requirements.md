@@ -5,12 +5,21 @@ Requirements for the GitHub Actions self-hosted runner that
 publish it to the `ovms-plugins` nginx pod on the Slate Hill K3s cluster. Hand this
 to whatever provisions/manages the runner. See also `docs/plugin-repo-hosting.md`.
 
+> **Provisioned as:** the `ovms-link-publish` **ARC** (Actions Runner Controller)
+> scale set on the Slate Hill K3s cluster — managed in the infrastructure repo at
+> `slate-hill/configs/k3s/arc/ovms-link-runner-set-values.yaml`. Because ARC's
+> `gha-runner-scale-set` matches jobs by the **scale-set name** (not `self-hosted` +
+> label arrays), the workflow uses `runs-on: ovms-link-publish`, and `kubectl` is
+> baked into the runner image rather than pre-installed on a host. The
+> platform/software/egress requirements below still describe what the runner
+> environment must provide.
+
 ## Registration
 
 | Field | Value |
 |---|---|
 | Scope | Repo-level runner for **`github.com/kezarjg/ovms-link`** |
-| Required labels | **`sh-k3s`** (plus the automatic `self-hosted`) — the job targets `runs-on: [self-hosted, sh-k3s]` |
+| Job targeting | ARC `gha-runner-scale-set` — the job uses `runs-on: ovms-link-publish` (the scale-set name). ARC does **not** support `self-hosted` + label-array matching. |
 | Runner group | Default (repo) unless you standardize on groups |
 | Lifecycle | Persistent **or** ephemeral both work — the job holds no cross-run state. Persistent is slightly cheaper (keeps the Node tool-cache warm; ephemeral re-downloads Node each run) |
 | Concurrency | One runner suffices — the workflow sets `concurrency: publish-plugin-repo`, so GitHub serializes publishes. Extra runners with the label are harmless |
