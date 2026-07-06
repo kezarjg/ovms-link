@@ -34,7 +34,11 @@ function buildManifest(version) {
       description: 'Streams live EV telemetry to ABRP via the Iternio Telemetry API.',
       prerequisites: ['ovms>=3.3.004'],
       elements: [
+        // abrp.js is a thin shim (module element); it defers compiling the real
+        // bundle (abrp-core.js, shipped as data) to the first ticker.1 so the big
+        // compile runs from the shallow event-loop stack, not the deep plugin loader.
         { type: 'module', path: 'abrp.js', name: 'abrp' },
+        { type: 'webrsc', path: 'abrp-core.js', name: 'abrp_core' },
       ],
     },
     {
@@ -102,6 +106,8 @@ function renderCertData(entries) {
 function writeElement(pluginDir, el, src) {
   var dest = path.join(pluginDir, el.path)
   if (el.path === 'abrp.js') {
+    fs.copyFileSync(src.shimPath, dest)
+  } else if (el.path === 'abrp-core.js') {
     fs.copyFileSync(src.bundlePath, dest)
   } else if (el.path === 'abrpcerts.js') {
     fs.copyFileSync(src.certsPluginPath, dest)
@@ -131,6 +137,7 @@ function assemblePages(outDir, bundlePath, version, certDir, webDir, certsPlugin
   webDir = webDir || path.resolve(__dirname, 'web')
   certsPluginPath = certsPluginPath || path.resolve(__dirname, 'abrpcerts.js')
   webPluginPath = webPluginPath || path.resolve(__dirname, 'abrpweb.js')
+  var shimPath = path.resolve(__dirname, 'abrp-shim.js')
   var manifest = buildManifest(version)
   var revPath = path.join(outDir, 'plugins.rev')
   var manifestPath = path.join(outDir, 'plugins.json')
@@ -139,6 +146,7 @@ function assemblePages(outDir, bundlePath, version, certDir, webDir, certsPlugin
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n')
   var src = {
     bundlePath: bundlePath,
+    shimPath: shimPath,
     certsPluginPath: certsPluginPath,
     webPluginPath: webPluginPath,
     certDir: certDir,

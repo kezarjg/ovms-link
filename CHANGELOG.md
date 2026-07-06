@@ -2,6 +2,17 @@
 
 ## 3.0.0-alpha.7 (unreleased)
 
+- **Plugin-install now works — abrp ships as a shim + a ticker-deferred core.** The
+  abrp plugin's `module` element is now a ~1.4 KB shim (`abrp-shim.js`); the real
+  bundle ships alongside it as a `webrsc` data element (`abrp-core.js`) and is
+  `require()`'d on the first `ticker.1`. This moves the big Duktape *compile* off the
+  deep pluginstore loader stack and onto the shallow event-loop stack, which was the
+  root cause of the boot-time DukTape task-stack overflow. Validated on the bench: the
+  compile peak drops from 11968 to **11184 / 12288 bytes (1104 bytes headroom, up from
+  320)**, boots clean with 0 crashes, and the core loads + streams normally (override
+  applied, GPS gate passed, telemetry sending). This only affects plugin delivery — the
+  side-load (hand-copy) install still loads the single bundle directly, which already
+  has enough headroom.
 - **Split into three plugins to shrink the abrp module element.** On-vehicle testing
   showed a plugin `module` element near ~50 KB overflows OVMS's 12 KB DukTape task
   stack while Duktape *compiles* it, aborting into a WDT reboot loop. Measured on-device
@@ -20,8 +31,9 @@
     the telemetry code.
 - Reverted the alpha.6 cert-bootstrap deferral (its premise was disproven on-device)
   and removed the likewise-ineffective `build.js --defer-entry` experiment.
-- Side-load (hand-copy) delivery is unaffected and remains the documented install
-  method; the plugin-install path stays blocked on the firmware stack size.
+- Side-load (hand-copy) delivery is unaffected and remains a supported install
+  method; the plugin-install path is now unblocked by the shim + deferred-core split
+  above (previously blocked on the firmware stack size).
 - **metrics.js simplification** (behavior-preserving; bundle −2 KB): entries with no
   computed value now omit their `metric` function — getOVMSMetric defaults to a
   passthrough of `metrics[requiredMetrics[0]]` (19 near-identical functions collapsed

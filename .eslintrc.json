@@ -4,6 +4,7 @@
   },
   "extends": ["eslint:recommended"],
   "globals": {
+    "abrp": "writable",
     "HTTP": "readonly",
     "OvmsConfig": "readonly",
     "OvmsMetrics": "readonly",

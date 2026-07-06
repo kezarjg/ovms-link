@@ -12,7 +12,7 @@ const {
   renderCertData,
 } = require('../publish')
 
-test('buildManifest returns abrp + abrpweb + abrpcerts; abrp is module-only', () => {
+test('buildManifest returns abrp + abrpweb + abrpcerts; abrp is shim + core', () => {
   const m = buildManifest('9.9.9')
   assert.strictEqual(Array.isArray(m), true)
   assert.strictEqual(m.length, 3)
@@ -22,9 +22,14 @@ test('buildManifest returns abrp + abrpweb + abrpcerts; abrp is module-only', ()
     assert.ok(/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(p.name)) // valid JS identifier (module global)
   })
 
-  // abrp: just the telemetry bundle now — no web pages, no certdata
+  // abrp: a thin shim (module) + the real bundle shipped as data (webrsc). The
+  // shim defers compiling abrp-core to a ticker so the big compile runs from the
+  // shallow event-loop stack, not the deep plugin loader (DukTape stack overflow).
   assert.strictEqual(byName.abrp.version, '9.9.9')
-  assert.deepStrictEqual(byName.abrp.elements, [{ type: 'module', path: 'abrp.js', name: 'abrp' }])
+  assert.deepStrictEqual(byName.abrp.elements, [
+    { type: 'module', path: 'abrp.js', name: 'abrp' },
+    { type: 'webrsc', path: 'abrp-core.js', name: 'abrp_core' },
+  ])
 
   // abrpweb: the module backend + the three pages
   assert.deepStrictEqual(byName.abrpweb.elements, [
@@ -46,7 +51,7 @@ test('manifest version tracks constants.VERSION', () => {
   assert.strictEqual(buildManifest(C.VERSION)[0].version, C.VERSION)
 })
 
-test('assemblePages writes plugins.json + abrp/abrp.js with the bundle bytes', () => {
+test('assemblePages writes plugins.json + abrp/abrp-core.js with the bundle bytes (abrp.js is the shim)', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pages-'))
   const bundle = path.join(dir, 'src-abrp.js')
   fs.writeFileSync(bundle, '// fake bundle\nmodule.exports = {}\n')
@@ -54,8 +59,15 @@ test('assemblePages writes plugins.json + abrp/abrp.js with the bundle bytes', (
 
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'out', 'plugins.json'), 'utf8'))
   assert.strictEqual(manifest[0].version, '9.9.9')
-  const copied = fs.readFileSync(path.join(dir, 'out', 'abrp', 'abrp.js'), 'utf8')
-  assert.strictEqual(copied, '// fake bundle\nmodule.exports = {}\n')
+  // The bundle bytes ship as the abrp-core webrsc, NOT as the module element.
+  const core = fs.readFileSync(path.join(dir, 'out', 'abrp', 'abrp-core.js'), 'utf8')
+  assert.strictEqual(core, '// fake bundle\nmodule.exports = {}\n')
+  // The module element (abrp.js) is the shim from the repo — it must NOT be the
+  // bundle, and it must defer the real load to a ticker.
+  const shim = fs.readFileSync(path.join(dir, 'out', 'abrp', 'abrp.js'), 'utf8')
+  assert.notStrictEqual(shim, core)
+  assert.match(shim, /ticker\.1/)
+  assert.match(shim, /abrp-core/)
 })
 
 test('assemblePages writes plugins.rev so OVMS detects repo changes', () => {
