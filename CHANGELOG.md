@@ -20,7 +20,7 @@
   bytes of headroom — and the plugin-loader path has slightly less, so it crosses the
   canary. Restructuring the JS doesn't help (un-bundling into 11 smaller units dropped
   the peak just 224 bytes); the only robust fix is a larger firmware stack (reported
-  upstream — see `~/uploads/ovms-plugin-module-element-stack-overflow.CORRECTED.md`).
+  upstream — see `docs/research/2026-07-06-plugin-module-element-duktape-stack-overflow.md`).
   To reduce the pressure from the plugin side, the repo now ships three plugins:
   - **abrp** — the telemetry bundle only (50.7 KB -> 44.9 KB, -11%).
   - **abrpweb** — the web UI (config/dashboard/status-hook pages + backend), moved out
