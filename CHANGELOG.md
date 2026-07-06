@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 3.0.0-alpha.8 (unreleased)
+
+- **Fix: the web Config page now auto-populates with the current settings.** It was
+  showing all-blank fields because it ran `config list usr abrp.` — which passes two
+  arguments to a command that takes one, so OVMS returned a usage error and every
+  field parsed empty. Worse, the interval/heartbeat/deadband settings run on code
+  defaults and are never written to OVMS config, so `config list` wouldn't show them
+  even with the right syntax. The page now populates from the plugin's **effective**
+  config (defaults applied) via `abrp.snapshot().config`, surfaced through the
+  existing `abrpweb.webStatus()` bridge. Side benefit: the token value is no longer
+  sent to the browser (the page uses a `token_set` boolean for the "configured"
+  placeholder instead of parsing the token out of `config list` output).
+
 ## 3.0.0-alpha.7 (unreleased)
 
 - **Plugin-install now works — abrp ships as a shim + a ticker-deferred core.** The

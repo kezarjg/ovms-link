@@ -37,13 +37,18 @@
 <script>
 (function(){
   function load(){
-    loadcmd("config list usr abrp.").then(function(out){
-      var m;
-      m = out.match(/sample_interval:\s*(\d+)/); if (m) $('#abrp-sample').val(m[1]);
-      m = out.match(/send_interval:\s*(\d+)/); if (m) $('#abrp-send').val(m[1]);
-      m = out.match(/heartbeat_interval:\s*(\d+)/); if (m) $('#abrp-heartbeat').val(m[1]);
-      m = out.match(/charge_power_delta_kw:\s*([\d.]+)/); if (m) $('#abrp-deadband').val(m[1]);
-      if (/user_token:/.test(out)) $('#abrp-token').attr('placeholder', '•••• configured');
+    // Populate from the plugin's *effective* config (defaults applied) via the
+    // status bridge — NOT `config list`, which only reports explicitly-set keys
+    // (so the intervals/deadband, which run on code defaults, showed blank).
+    loadcmd("script eval abrpweb.webStatus()").then(function(out){
+      try {
+        var st = JSON.parse(out), c = st.config || {};
+        if ('sample_interval' in c) $('#abrp-sample').val(c.sample_interval);
+        if ('send_interval' in c) $('#abrp-send').val(c.send_interval);
+        if ('heartbeat_interval' in c) $('#abrp-heartbeat').val(c.heartbeat_interval);
+        if ('charge_power_delta_kw' in c) $('#abrp-deadband').val(c.charge_power_delta_kw);
+        if (st.token_set) $('#abrp-token').attr('placeholder', '•••• configured');
+      } catch(e) {}
     });
   }
   $('#abrp-save').on('click', function(){
