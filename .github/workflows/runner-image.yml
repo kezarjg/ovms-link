@@ -10,6 +10,10 @@ name: runner-image
 
 on:
   push:
+    # branch pushes only — tag pushes bypass `paths` filters in GitHub Actions,
+    # which otherwise rebuilt this image on every release tag (v*) despite no
+    # ci/runner change. Restricting to branches excludes tags.
+    branches: ['**']
     paths:
       - 'ci/runner/**'
       - '.github/workflows/runner-image.yml'
