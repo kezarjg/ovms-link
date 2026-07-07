@@ -14,7 +14,7 @@
   on navigation and does not stack across revisits. Only affects the web UI; telemetry
   is unchanged.
 
-## 3.0.0-alpha.8 (unreleased)
+## 3.0.0-alpha.8
 
 - **Fix: the web Config page now auto-populates with the current settings.** It was
   showing all-blank fields because it ran `config list usr abrp.` — which passes two
@@ -27,7 +27,7 @@
   sent to the browser (the page uses a `token_set` boolean for the "configured"
   placeholder instead of parsing the token out of `config list` output).
 
-## 3.0.0-alpha.7 (unreleased)
+## 3.0.0-alpha.7
 
 - **Plugin-install now works — abrp ships as a shim + a ticker-deferred core.** The
   abrp plugin's `module` element is now a ~1.4 KB shim (`abrp-shim.js`); the real
@@ -72,7 +72,7 @@
   measurement showed OVMS's own JS already uses ~10.6 KB of the 12 KB task stack (86%),
   so this is marginal; the firmware stack remains the real constraint (see the bug report).
 
-## 3.0.0-alpha.6 (unreleased)
+## 3.0.0-alpha.6
 
 - **Attempted plugin-install crash fix — SUPERSEDED in alpha.7, did not work.**
   `Ev.startup()` was changed to defer `Certs.bootstrap()` off the synchronous
@@ -91,7 +91,7 @@
   openvehicles reference repo layout. These were hand-patched onto the test server
   during Stage-2; now they're generated.
 
-## 3.0.0-alpha.5 (unreleased)
+## 3.0.0-alpha.5
 
 - Configurable thresholds (RFC [#42](https://github.com/iternio/ovms-link/issues/42)):
   two more tunables are now user-settable, validated/clamped, live-reloaded on
@@ -105,7 +105,7 @@
     in 3.0 — it belonged to the 2.x state-adaptive cadence / median smoothing, both
     removed in the change-based redesign.
 
-## 3.0.0-alpha.4 (unreleased)
+## 3.0.0-alpha.4
 
 - Fix two 2.3.0 fixes that were lost when 3.0 forked before them (found by a
   2.3.0→3.0 regression sweep; see `docs/research/2026-07-04-2.3.0-to-3.0-regression-sweep.md`):
@@ -125,7 +125,7 @@
 - Added charge/drive overlap tests (bundle) and a deadband test (`queue.test.js`)
   so these can't silently regress again.
 
-## 3.0.0-alpha.3 (unreleased)
+## 3.0.0-alpha.3
 
 - Adaptive sample cadence: the sampler now times its own `createTelemetry()` collect
   and, when a collect runs slower than `COLLECT_PRESSURE_FACTOR`× its rolling baseline
@@ -147,7 +147,7 @@
 - OAuth2 onboarding and the plan dashboard remain deferred (blocked on registering a
   dedicated Iternio OAuth2 client).
 
-## 3.0.0-alpha.1 (unreleased)
+## 3.0.0-alpha.1
 
 - Change-based telemetry: sample every `usr abrp.sample_interval` seconds (1-5,
   default 3, gated on `m.monotonic`); queue a point only when a rounded metric
