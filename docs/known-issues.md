@@ -9,8 +9,35 @@ issue; note the date and status.
 ## web UI: `webStatus()` poll may keep firing after leaving the dashboard page
 
 - **Filed:** 2026-07-07
-- **Status:** open — needs on-device teardown-hook verification
-- **Area:** `web/dashboard.htm` (also check `web/config.htm`, `web/status-hook.htm`)
+- **Status:** CONFIRMED 2026-07-07 (framework source + on-device log) — fix pending
+- **Area:** `web/dashboard.htm` (registered at `/usr/abrp/status`)
+
+### Verification (2026-07-07)
+
+Confirmed by two independent lines of evidence:
+
+**1. Framework contract.** The OVMS web framework's page-swap function `setcontent()`
+(`ovms_webserver/assets/ovms.js`) tears a page down by calling
+`tgt.find(".receiver").unsubscribe()`, `tgt.chart("destroy")`, `tgt.table("destroy")`,
+then `tgt.html(text)`, then `tgt.trigger("load")`. It **never fires a `"remove"` or
+unload event**, and `#main` itself is never removed — only its inner HTML is replaced.
+So `$('#main').one('remove', …)` waits on an event that never fires (and would target
+the wrong element regardless), and `clearInterval(timer)` never runs.
+
+**2. On-device log.** Session on 2026-07-07:
+
+| time | log event | meaning |
+| --- | --- | --- |
+| 06:16:18.329 | `GET /usr/abrp/status` | dashboard loads → starts `setInterval(refresh, 5000)` |
+| 06:16:18.469 | first `webStatus()` | immediate `refresh()` |
+| every ~5 s | two interleaved cadences ~0.6 s apart | **two** timers alive → stacking across revisits |
+| **06:19:00.339** | **`GET /status`** | **user navigates away from the dashboard** |
+| 06:19:03 → 06:20:19 | polling continues **79 s** | timer survived navigation — teardown never fired |
+| 06:20:19.089 | last poll | stops only when the tab/websocket actually closed |
+
+The 79 s of polling after the user left the dashboard is the empirical fingerprint:
+the orphaned `setInterval` keeps POSTing `webStatus()` until the browser tab closes,
+not when the page is left.
 
 ### Summary
 
@@ -57,9 +84,12 @@ matches the observed *two* concurrent pollers.
 
 ### Proposed follow-up
 
-- Verify the real page-teardown event in the OVMS web console and hook the
-  `clearInterval` to something that reliably fires; guard against stacking duplicate
-  intervals across revisits.
+- Replace the non-firing `$('#main').one('remove', …)` cleanup. The framework gives
+  no arbitrary-teardown event, so options are: (a) store the timer on a window-scoped
+  singleton and `clearInterval` any prior one at the top of the page load (kills the
+  stacking too), and/or (b) drive the refresh off the framework's own `".receiver"`
+  subscription mechanism, which `setcontent()` *does* tear down (`unsubscribe()`).
+- Guard against stacking duplicate intervals across revisits (see (a)).
 - Consider slowing the poll (5 s → 10–15 s) and/or only polling while the vehicle is
   active, to cut idle log volume regardless.
 
