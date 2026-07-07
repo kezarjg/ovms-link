@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 3.0.0-alpha.9
+
+- **Fix: the ABRP Status web page no longer keeps polling after you navigate away
+  from it.** The page refreshes itself every 5 s by running `abrpweb.webStatus()`,
+  and its cleanup relied on a `$('#main').one('remove', …)` hook that never fires —
+  the OVMS web framework swaps pages by replacing `#main`'s contents, not by removing
+  `#main`, and emits no unload event. So the `setInterval` outlived the page and kept
+  issuing status commands until the browser tab was closed (and stacked another timer
+  on every revisit). The page now parks its timer on `window` and clears any prior one
+  on load (no stacking), and the poll self-cancels as soon as its table leaves the DOM
+  (stops within one interval of leaving). Verified on-device: polling stops immediately
+  on navigation and does not stack across revisits. Only affects the web UI; telemetry
+  is unchanged.
+
 ## 3.0.0-alpha.8 (unreleased)
 
 - **Fix: the web Config page now auto-populates with the current settings.** It was
