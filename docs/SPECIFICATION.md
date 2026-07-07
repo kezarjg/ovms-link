@@ -446,7 +446,7 @@ conversion). A field is sent only when its OVMS source(s) are present.
 | --- | --- | --- | --- |
 | `utc` | s | `m.time.utc` | Required for any send (see GPS gating) |
 | `soc` | % | `v.b.soc` (NL: `xnl.v.b.soc.instrument`) | |
-| `power` | kW | `v.b.power` | + charging, − discharging; rounded to 1 dp |
+| `power` | kW | `v.b.power` | + discharging, − charging (OVMS & Iternio both output-positive; passed through unmodified); rounded to 1 dp |
 | `speed` | kph | `v.p.speed` | rounded to integer |
 | `lat` / `lon` | ° | `v.p.latitude` / `v.p.longitude` | |
 | `is_charging` | bool | `v.c.charging` | |
@@ -460,7 +460,7 @@ conversion). A field is sent only when its OVMS source(s) are present.
 | `ext_temp` | °C | `v.e.temp` | |
 | `batt_temp` | °C | `v.b.temp` | |
 | `voltage` | V | `v.b.voltage` | |
-| `current` | A | `v.b.current` | |
+| `current` | A | `v.b.current` | + discharging, − charging (OVMS & Iternio both output-positive; passed through unmodified) |
 | `odometer` | km | `v.p.odometer` | |
 | `est_battery_range` | km | `v.b.range.est` (NL: instrument/ideal blend) | |
 | `hvac_power` | kW | *(none by default)* | Override-only; supply per-vehicle via `overrideMetricMap` |
