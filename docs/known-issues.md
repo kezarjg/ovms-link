@@ -9,8 +9,29 @@ issue; note the date and status.
 ## web UI: `webStatus()` poll may keep firing after leaving the dashboard page
 
 - **Filed:** 2026-07-07
-- **Status:** FIXED in `web/dashboard.htm` 2026-07-07 (window-singleton timer +
-  self-cancel guard) — pending on-device confirmation after next plugin publish
+- **Status:** FIXED + VERIFIED ON-DEVICE 2026-07-07 (window-singleton timer +
+  self-cancel guard)
+
+### On-device verification (2026-07-07)
+
+Deployed the fixed `dashboard.htm` to the bench module (scp to
+`/store/plugins/abrpweb/`; the webpage is registered from the file by the plugin
+framework at boot, so a reboot was needed to re-register — `script reload` alone
+does not). Confirmed the served page carried the fix, then drove it with headless
+Chromium (Playwright) through the real OVMS web framework (`loadPage()` →
+`setcontent()`), instrumenting the global `loadcmd` so every poll the dashboard
+attempted was counted regardless of transport (websocket vs POST):
+
+| phase | polls | `abrpDashTimer` |
+| --- | --- | --- |
+| on dashboard (13 s) | 3 @ 2,7,12 s (clean 5 s cadence) | `4` (alive) |
+| **left → /home (13 s)** | **0** | **`null`** (self-cancelled) |
+| returned → dashboard (13 s) | 3 @ 28,33,38 s (single cadence, not 6) | `10` (one new timer) |
+| **left again (14 s)** | **0** | **`null`** |
+
+Stop-on-leave confirmed (0 polls after each navigation, vs the old ~79 s tail);
+no stacking on return (single cadence, single timer id). abrp itself verified
+healthy after the reboot (`webStatus()` → `sending:true`, `soc:63`, no crash).
 - **Area:** `web/dashboard.htm` (registered at `/usr/abrp/status`)
 
 ### Verification (2026-07-07)
