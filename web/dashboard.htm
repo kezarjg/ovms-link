@@ -8,6 +8,14 @@
 </div>
 <script>
 (function(){
+  // Kill any poll timer left over from a previous load of this page. The OVMS web
+  // framework swaps pages by replacing #main's *contents* (setcontent() ->
+  // $('#main').html(...)); it never removes #main nor fires a "remove"/unload event,
+  // so a plain setInterval survives navigation and stacks on every revisit. We park
+  // the timer id on window so a fresh load can clear the previous one. (See
+  // docs/known-issues.md — verified against ovms.js + on-device log 2026-07-07.)
+  if (window.abrpDashTimer) { window.clearInterval(window.abrpDashTimer); window.abrpDashTimer = null; }
+
   // Build each row with jQuery .text() so server/API-provided values (e.g. the
   // ABRP account name/vehicle from oauth/me) are escaped — never concatenate
   // untrusted strings into .html() (XSS).
@@ -37,14 +45,22 @@
     if ('is_charging' in t) $body.append(row('Charging', t.is_charging ? 'yes' : 'no'));
   }
   function refresh(){
+    // Self-cancel if we've been navigated away from: once the framework swaps the
+    // page, our table is gone from the DOM, so stop polling instead of running on
+    // orphaned until the browser tab closes. This is the real teardown (the framework
+    // fires no unload event we could hook); the window-timer clear above only stops
+    // the *stacking* on revisit.
+    if (!$('#abrp-status-body').length) {
+      window.clearInterval(window.abrpDashTimer);
+      window.abrpDashTimer = null;
+      return;
+    }
     loadcmd("script eval abrpweb.webStatus()").then(function(out){
       try { render(JSON.parse(out)); }
       catch(e){ $('#abrp-status-body').empty().append($('<tr>').append($('<td>').text('unavailable'))); }
     });
   }
-  var timer = window.setInterval(refresh, 5000);
+  window.abrpDashTimer = window.setInterval(refresh, 5000);
   refresh();
-  // Best-effort timer cleanup when the page is replaced (verify the exact hook on-device).
-  $('#main').one('remove', function(){ window.clearInterval(timer); });
 })();
 </script>

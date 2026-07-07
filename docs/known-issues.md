@@ -9,7 +9,8 @@ issue; note the date and status.
 ## web UI: `webStatus()` poll may keep firing after leaving the dashboard page
 
 - **Filed:** 2026-07-07
-- **Status:** CONFIRMED 2026-07-07 (framework source + on-device log) — fix pending
+- **Status:** FIXED in `web/dashboard.htm` 2026-07-07 (window-singleton timer +
+  self-cancel guard) — pending on-device confirmation after next plugin publish
 - **Area:** `web/dashboard.htm` (registered at `/usr/abrp/status`)
 
 ### Verification (2026-07-07)
