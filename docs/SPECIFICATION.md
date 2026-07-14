@@ -256,7 +256,10 @@ design spec
 - **`callbackVehicleOff`** (vehicle off / charge stop): unsubscribes `ticker.1` and
   enqueues a final full bookend **forced to a coherent parked state**
   (`speed`/`power` = 0, `is_parked` = true, `is_charging`/`is_dcfc` = false), so ABRP
-  ends the session cleanly regardless of the last live sample.
+  ends the session cleanly regardless of the last live sample. The bookend is flagged
+  as a **resync point** (§5.4) so delta encoding sends it in full — without that, the
+  forced fields are stripped precisely because they match the last live sample, and
+  the guarantee above is void on the wire.
 
 ### 5.4 Queue management & delivery semantics
 
@@ -278,6 +281,15 @@ design spec
     resync, drop-safe), and every subsequent point carries `utc` plus only the fields
     that changed vs. the prior point. The in-memory queue still holds **full
     snapshots**; delta encoding happens only at the wire (see §5.6).
+  - **Resync points are exempt.** A point carrying the internal `RESYNC_KEY` marker
+    (`__resync`) is **always sent in full**, even when nothing changed vs. the prior
+    point. The session bookend (§5.3) sets it: the state it forces normally *already*
+    matches the last live sample — gear reaches P a sample before the ignition-off
+    event fires — so plain delta encoding would strip `is_parked`/`speed`/`is_charging`
+    and the last point ABRP received for a trip would never say the car had parked.
+    The marker is queue-side bookkeeping only: it is stripped before transmission and
+    stays on the queued point, so a batch held back by a failed send is still re-sent
+    in full.
   - **Success = HTTP 200 AND body `status === "ok"`** (`isApiOk`). Only then are
     the batch's points removed **by identity** (so a concurrent overflow drop that
     shifted the queue front cannot discard unsent points). On any other outcome the batch
