@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 3.0.0-alpha.10
+
+- **Fix: ABRP no longer leaves a trip open after you park.** The vehicle-off bookend
+  forces a coherent parked state (`speed`/`power` = 0, `is_parked` = true,
+  `is_charging`/`is_dcfc` = false) so ABRP can close the session — but delta encoding
+  then stripped every one of those fields back out, because it only emits fields that
+  *changed* vs. the previous point and the car is already stopped and in gear P by the
+  time the ignition-off event fires. The last point ABRP received for a drive was
+  effectively just `{utc, power: 0}` — it never said the car had parked, so the trip
+  stayed open across a stop. The bookend is now flagged as a resync point and always
+  transmitted in full. Charge sessions use the same bookend and were affected by the
+  same mechanism (there `is_charging` happened to survive, since it does flip at the
+  bookend, but `is_parked`/`is_dcfc` did not).
+
 ## 3.0.0-alpha.9
 
 - **Fix: the ABRP Status web page no longer keeps polling after you navigate away
